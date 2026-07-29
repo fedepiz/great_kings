@@ -6,6 +6,11 @@ package-lock.json
 harness/new.cjs
 harness/ref.cjs
 
+# The standalone page. UNLIKE levant-prototype-v25.jsx this one is NOT committed: it is a
+# minified React bundle, so every rebuild would rewrite 220KB of unreadable diff, and unlike
+# the prototype nothing else reads it. Rebuild with `node build-standalone.js`.
+great-kings.html
+
 # scratch copies
 *.bak
 *.bak*

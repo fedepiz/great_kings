@@ -4,6 +4,7 @@
   "description": "The Great Kings — a Late Bronze Age strategy game, with an LLM court alongside it",
   "scripts": {
     "build": "node build-game.js",
+    "standalone": "node build-game.js && node build-standalone.js",
     "test": "./harness/run-all.sh",
     "bench": "./harness/rebuild-bench.sh && ./harness/inject.sh"
   },

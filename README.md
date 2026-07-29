@@ -9,14 +9,53 @@ package manager state that matters. `npx esbuild` is used for building and for t
 
 ---
 
-## The two things you can run
+## The three things you can run
 
-Both are **single self-contained files**, built from source, meant to be opened as artifacts:
+All are **single self-contained files**, built from source:
 
-| `levant-prototype-v25.jsx` | the game — board, panels, and the scribe's desk |
+| `levant-prototype-v25.jsx` | the game — board, panels, and the scribe's desk. Opened as a **chat artifact** |
+| `great-kings.html` | the same game as a **page** that opens anywhere. The scribe is inert in it |
 | `orders-bench.jsx` (built to `/mnt/user-data/outputs/`) | the evaluation bench |
 
-**Neither is edited by hand.** Both are build outputs and are overwritten. Edit the sources.
+**None is edited by hand.** All are build outputs and are overwritten. Edit the sources.
+
+### Which container, and why it matters
+
+The prototype is a React *component*, not a page. A claude.ai chat artifact supplies three
+things it does not carry, and the difference between the two containers is exactly those
+three:
+
+| | chat artifact | `great-kings.html` |
+|---|---|---|
+| React | supplied by the container | bundled in |
+| Tailwind's stylesheet | supplied by the container | **shimmed** — see below |
+| `fetch` to `api.anthropic.com` | proxied, credentials injected | blocked; **the scribe cannot run** |
+
+That third row is the one to hold onto. `callModel` posts to `api.anthropic.com` carrying
+**no api key at all**, so it can only ever work in a container that injects credentials on its
+behalf. The scribe's desk still draws in the page and still takes an instruction; "go" fails.
+Say so wherever you put the page.
+
+**The Tailwind shim.** The table styles itself two ways at once — every colour, face and
+cursor is an inline `style={{ }}`, and only spacing and type size are Tailwind class names.
+Nothing defines those names in a bare page, and a published page may not fetch a stylesheet,
+so `build-standalone.js` carries the 32 utilities the table asks for at Tailwind v3's own
+values. The split is what makes that safe: the whole visual identity travels on its own, and
+a wrong metric would show up as cramped, never as miscoloured.
+
+The shim is guarded, because a metric that quietly stops covering the table is the same shape
+as every other bug this project has found. The build reads the classes back out of the built
+file and **refuses to write** if the table asks for one the shim does not define. It knows the
+four ways the table writes a `className` and refuses on a fifth rather than skipping it —
+two of them defeat a naive scan:
+
+```jsx
+className={name === "turn" ? "mt-4 pt-3" : "mt-2"}   // "turn" is a comparison, not a class
+className={shell}                                     // the classes are behind a variable
+```
+
+Take every quoted string and you invent a class called `turn`; take only the literal form and
+you miss `grid grid-cols-2 gap-1` entirely.
 
 ---
 
@@ -27,7 +66,8 @@ levant/
   engine.js        THE RULES. No React, no JSX, no DOM. ~2,200 lines, 160 exports.
   app.jsx          THE TABLE. Interface and the scribe desk. ~770 lines.
 
-build-game.js      engine.js + app.jsx  →  levant-prototype-v25.jsx
+build-game.js       engine.js + app.jsx      →  levant-prototype-v25.jsx
+build-standalone.js levant-prototype-v25.jsx →  great-kings.html  (React + a utility shim)
 
 harness/
   run-all.sh       everything: build, differential, ten suites, both sources, both renders
@@ -153,9 +193,10 @@ two routes to the same board compare equal; it is exact at action boundaries.
 ## Working on it
 
 ```bash
-./harness/run-all.sh          # build, differential, nine suites, both renders
+./harness/run-all.sh          # build, differential, ten suites, both sources, both renders
 ./harness/rebuild-bench.sh    # corpus → pack, with every check
 ./harness/inject.sh           # build the orders-bench artifact
+npm run standalone            # rebuild, then the page: great-kings.html
 ```
 
 **After any engine change:**

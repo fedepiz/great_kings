@@ -18,15 +18,14 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };
 
 const key = (c) => JSON.stringify([c.t, c.rid ?? "", c.i ?? "", c.v ?? "", c.bt ?? "", c.good ?? "", c.pid ?? ""]);
-const NEVER = new Set(["srcBack", "tradeCancel", "cancelActivation", "bidTake", "calloff", "endActivation", "pass", "forfeit"]);
+const NEVER = new Set(["srcBack", "srcToChoose", "tradeCancel", "cancelActivation", "bidTake", "calloff", "endActivation", "pass", "forfeit"]);
 // NOT ACTIONS AT ALL. The year closing, a famine's abandonments, and raising a new palace
 // when the last one is lost are the world's doing or a forced recovery — not something a
 // court ORDERS. No order describes them, and none should be asked to.
 //   resolveUpkeep  the year closes
 //   perish         a famine takes a building
 //   restoreCourt   a power with no palace left rebuilds one; there is no choice in it
-//   note           a chronicle remark, not a move
-const NOT_AN_ACTION = new Set(["resolveUpkeep", "perish", "restoreCourt", "note"]);
+const NOT_AN_ACTION = new Set(["resolveUpkeep", "perish", "restoreCourt"]);
 
 // Walk the engine, cutting the trace into actions-proper, and round-trip each one.
 function sweep(seeds, rounds) {

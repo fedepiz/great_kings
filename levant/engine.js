@@ -1167,7 +1167,8 @@ function view(g) {
     cancelActivation: "Cancel", srcBack: "Back", tradeCancel: "Cancel trade", back: "Back",
     calloff: "Call it off", launch: "Launch", stand: "Stand", endRaid: "Withdraw",
     resolveUpkeep: "Resolve upkeep", restoreCourt: "Restore the court",
-    srcStock: "From the stockpile", commitTaps: "Settle",
+    srcStock: "From the stockpile", commitTaps: "Settle", srcToChoose: "Back",
+    giftSend: "Send the embassy",
   };
   const opt = (c, label, more) => ({ label: label || SHORT[c.t] || describeCmd(g, c), gloss: describeCmd(g, c),
     cmd: c, state: "available", ...(more || {}) });
@@ -1376,16 +1377,75 @@ function view(g) {
         label: R[rid].n, state: shut ? "closed" : undefined, options });
     }
 
-    for (const c of only("srcStock"))
-      panels.push({ kind: "choices", band: "detail", id: "purse", pick: "act", label: "",
-        options: [opt(c, "From the stockpile", { category: "terminal" })] });
+    // THE PURSE IS ALWAYS DRAWN, whether it may serve or not — the same courtesy the sponsors
+    // above are shown. A button that vanishes when the stores run dry, or the moment a
+    // producer is tapped, reads as "this was never an option here"; a button that stays and
+    // says why reads as the refusal it is, and names what to do about it. It also stops the
+    // row below it from moving under the hand as sponsors go on and off.
+    const purse = only("srcStock")[0];
+    panels.push({ kind: "choices", band: "detail", id: "purse", pick: "act", label: "",
+      options: [purse ? opt(purse, "From the stockpile", { category: "terminal" })
+        // the two gates availableCommands keeps on it, said in the order a player meets them
+        : blocked("From the stockpile",
+            (m.taps || []).length
+              ? "the bill is being met from the provinces — set those sponsors aside to pay from the stores instead"
+              : `your stores cannot cover ${costCaption(spec, m)}`,
+            { category: "terminal" })] });
     for (const c of only("commitTaps"))
       panels.push({ kind: "choices", band: "commit", id: "settle", pick: "act", label: "", state: "satisfied",
         options: [opt(c, "Settle the bill", { category: "terminal", rank: "primary" })] });
   }
 
+  // ---- and paying from the stores: WHICH goods leave them ----
+  // The choose phase above draws the sponsors; this phase draws the purse. It used to draw
+  // NOTHING. `srcStock` on a bill that names no fixed goods — an embassy's gifts, a trade's
+  // matching payment — does not settle anything: it opens a second question, which goods.
+  // Those commands were on offer the whole time (`giftToggle`, `giftSend`, `srcStockUnit`)
+  // and no panel carried them, so "From the stockpile" led to a panel with one button on it,
+  // "End activation", and the activation was the only way out.
+  if (g.mode && g.mode.v === "source" && g.mode.phase === "stock") {
+    const m = g.mode;
+    // EVERY GOOD, ALWAYS. An empty store is shown as an empty store rather than left out, so
+    // the row does not grow under the hand as the stores change. A good that cannot serve
+    // says WHY: an empty store and a good that is the very thing being bought are different
+    // refusals, and reading "no pottery in the stockpile" while holding pottery is a lie.
+    const goodsPanel = (id, label, offered, why, stateOf) =>
+      panels.push({ kind: "choices", band: "detail", id, pick: "many", label,
+        options: GOODS.map((t) => {
+          const c = offered.get(t);
+          if (!c) return blocked(t, why(t), { category: "producer", subject: { good: t } });
+          return opt(c, t, { category: "producer", subject: { good: t }, state: stateOf(t) });
+        }) });
+    const bare = (t) => `no ${t} in the stockpile`;
+
+    if (m.kind === "entreat") {
+      goodsPanel("gifts", "the embassy carries",
+        new Map(only("giftToggle").map((c) => [c.good, c])), bare,
+        (t) => ((m.gifts || []).includes(t) ? "chosen" : "available"));
+      for (const c of only("giftSend"))
+        panels.push({ kind: "choices", band: "commit", id: "send", pick: "act", label: "", state: "satisfied",
+          options: [opt(c, "Send the embassy", { category: "terminal", rank: "primary" })] });
+    } else {
+      // a unit at a time, and each one is SPENT as it is laid — there is no basket to confirm
+      goodsPanel("purse", "lay from the stores",
+        new Map(only("srcStockUnit").map((c) => [c.good, c])),
+        (t) => (t === m.extracted ? `${t} is what you are buying — pay in something else` : bare(t)),
+        () => "available");
+    }
+  }
+
   // ---- a word to the player: what is owed, what is forecast, what stands in the way ----
   const say = (level, text) => panels.push({ kind: "notice", band: "notice", level, text });
+
+  // an embassy's worth is worth knowing before it is sent, whoever is carrying the gifts —
+  // the provinces that sponsor it or the stores it is drawn from. entreatRemark writes for
+  // the model, in capitals; the level carries the urgency here, so the words need not shout.
+  const sayEmbassyWorth = (rid, nGoods) => {
+    const remark = nGoods ? entreatRemark(g, p, rid, nGoods) : null;
+    if (remark) say(/⚠|WARNING/.test(remark) ? "warning" : "ok",
+      remark.replace(/^⚠\s*/, "").replace(/^WARNING:\s*/, "")
+            .replace(/\bBELOW\b/g, "below").replace(/\bNOTHING\b/g, "nothing"));
+  };
 
   if (g.mode && g.mode.v === "source" && g.mode.phase === "choose") {
     const m = g.mode, spec = specOf(m);
@@ -1396,17 +1456,26 @@ function view(g) {
       if (short.length) say("problem", `Still owed: ${andList(short)}.`);
       else say("ok", `The bill is met — ${owed}.`);
     }
-    // an embassy's worth is worth knowing before it is sent
     if (m.kind === "entreat" && (m.taps || []).length) {
       const goods = new Set();
       for (const [r2, i2] of m.taps) { const y = yieldOf(g, r2, i2); const bd = g.b[r2][i2];
         if (y) goods.add(y.good); else if (bd && BT[bd.t].issues) goods.add(BT[bd.t].issues); }
-      const remark = goods.size ? entreatRemark(g, p, m.region, goods.size) : null;
-      // entreatRemark writes for the model, in capitals. The level carries the urgency now,
-      // so the words need not shout.
-      if (remark) say(/⚠|WARNING/.test(remark) ? "warning" : "ok",
-        remark.replace(/^⚠\s*/, "").replace(/^WARNING:\s*/, "")
-              .replace(/\bBELOW\b/g, "below").replace(/\bNOTHING\b/g, "nothing"));
+      sayEmbassyWorth(m.region, goods.size);
+    }
+  }
+
+  // the same word, for a bill being settled out of the stores rather than off the land
+  if (g.mode && g.mode.v === "source" && g.mode.phase === "stock") {
+    const m = g.mode;
+    if (m.kind === "entreat") {
+      const n = (m.gifts || []).length;
+      if (!n) say("info", "Choose the goods the embassy carries — one distinct good is +1 influence, to a maximum of +4.");
+      else say("ok", `The embassy carries ${andList(m.gifts)}.`);
+      sayEmbassyWorth(m.region, n);
+    } else {
+      // paying unit by unit: what is still owed is a COUNT, and each good laid is gone
+      const left = m.need - (m.paid || []).length;
+      if (left > 0) say("info", `${left} more good${left > 1 ? "s" : ""} to lay, any but ${m.extracted}. Each is spent as it is laid.`);
     }
   }
 
@@ -1506,7 +1575,7 @@ function view(g) {
 
   // ---- leave the table ----
   // calling a raid off belongs with the raid's own resolutions, not here
-  const back = ["back", "srcBack", "tradeCancel", "cancelActivation", "endActivation"]
+  const back = ["back", "srcBack", "srcToChoose", "tradeCancel", "cancelActivation", "endActivation"]
     .flatMap((t) => only(t)).map((c) => opt(c, null, { category: "back" }));
   if (back.length) panels.push({ kind: "choices", band: "commit", id: "back", pick: "act", label: "", options: back });
 
@@ -1612,9 +1681,24 @@ function fingerprint(g) {
 // THE GATE. dispatch is the whole API — the UI, a test, an AI and a network peer all arrive
 // here — so it must be TOTAL: any command, in any state, is either carried out or refused,
 // never a crash. Rather than scatter null-checks through thirty cases, one gate asks the
-// command layer whether this command is on offer at all. Only the few commands the interface
-// issues outside the offered menu, and the engine's own bookkeeping, pass without asking.
-const UNGATED = ["note", "srcToChoose", "endRaid", "pass", "endActivation", "cancelActivation", "resolveUpkeep", "forfeit"];
+// command layer whether this command is on offer at all.
+//
+// IT ASKS ABOUT EVERY COMMAND. There used to be an exception list — `UNGATED` — for "the few
+// commands the interface issues outside the offered menu, and the engine's own bookkeeping".
+// Neither description survived contact with the code it was describing. The table has ONE
+// dispatch site and it ships `view`'s own commands verbatim, so nothing is issued outside the
+// menu any more; and `note`, the only genuine bookkeeping entry, was constructed nowhere at
+// all. What the list did instead was let six commands ignore the rules: measured over 32,035
+// states, an off-menu `resolveUpkeep` closed the year in 29,909 of them — from mid-activation,
+// round 1 — and `pass`, `forfeit`, `cancelActivation` and `endRaid` all worked in the middle
+// of errands the menu forbids them in. It also walked through the gate that keeps a trade from
+// stepping back out of `stock` phase once goods are paid, which is a rule, not a formality.
+//
+// The one thing the list genuinely bought was a backstop: a rules defect that dropped the
+// exits from the menu would wedge an activation, and `endActivation` survived it by being
+// ungated. That invariant is now asserted where it belongs — test-commands.js walks the game
+// and checks every open activation offers a way out — so the menu is held to being right
+// rather than patched here for being wrong.
 function dispatch(g, cmd) {
   if (!cmd || typeof cmd.t !== "string") { g.log.unshift("A command arrives malformed and is set aside."); return g; }
   // STALE: written against a world that no longer exists. Checked only when a stamp is
@@ -1623,7 +1707,7 @@ function dispatch(g, cmd) {
     g.log.unshift("That word arrives too late — the world has moved since it was written.");
     return g;
   }
-  if (!UNGATED.includes(cmd.t) && !validCmd(g, cmd)) {
+  if (!validCmd(g, cmd)) {
     g.log.unshift(`That is not on offer now: ${cmd.t}${cmd.rid ? " " + cmd.rid : ""}.`);
     return g;
   }
@@ -1670,7 +1754,7 @@ const stepKey = (g) => [
 function applyCommand(g, cmd) {
   const p = g.turn;
   // Interrupts must be answered before anything else — the engine enforces what the UI implies.
-  if (g.shortfall && !["perish", "note"].includes(cmd.t)) { g.log.unshift("Famine: abandonments must be chosen first."); return g; }
+  if (g.shortfall && cmd.t !== "perish") { g.log.unshift("Famine: abandonments must be chosen first."); return g; }
   switch (cmd.t) {
     case "activate": if (!g.act) beginActivation(g, cmd.rid, cmd.i); return g;
     case "verb": if (g.act) g.mode = { v: cmd.v }; return g;
@@ -1698,7 +1782,18 @@ function applyCommand(g, cmd) {
       return g;
     }
     case "srcStockUnit": sourceStockUnit(g, cmd.good); return g;
-    case "srcToChoose": g.mode.phase = "choose"; return g;
+    // back to the sponsors. The basket of gifts is scratch for the purse and is set down with
+    // it — nothing has left the stores, and the choose phase pays off the land, not the store.
+    // The mode check is belt-and-braces now that the gate admits nothing off the menu, and it
+    // is kept because it cost a crash to learn: this command used to be UNGATED, so
+    // `g.mode.phase = …` on a state with no mode threw, and nothing could reach it only
+    // because no panel offered it. A case that guards its own ground cannot be re-broken by
+    // the gate above changing its mind.
+    case "srcToChoose":
+      if (!g.mode || g.mode.v !== "source") return g;
+      g.mode.phase = "choose";
+      if (g.mode.gifts) g.mode.gifts = [];
+      return g;
     case "srcBack": {
       const mm = g.mode;
       g.mode = mm.kind === "trade" ? { v: "trade" } : mm.kind === "entreat" ? { v: "entreat" } : { v: "build", region: mm.region };
@@ -1760,7 +1855,6 @@ function applyCommand(g, cmd) {
     }
     case "resolveUpkeep": g.log.unshift("— Upkeep —"); runUpkeep(g, live(g)[0]); return g;
     case "perish": perish(g, cmd.rid, cmd.i); return g;
-    case "note": g.log.unshift(cmd.msg); return g;
     default: g.log.unshift(`Unknown command: ${cmd.t}`); return g;
   }
 }
@@ -1874,6 +1968,7 @@ function describeCmd(g, c) {
     case "srcStock": return "pay ENTIRELY from your stores";
     case "back": return "set the errand aside — nothing has been spent";
     case "srcBack": return "step back — choose the payment differently";
+    case "srcToChoose": return "step back to the sponsors — pay off the land instead of the stores";
     case "commitTaps": return "confirm — the selected taps sponsor the cost";
     case "srcStockUnit": return `pay 1 ${c.good} from your stores`;
     case "giftToggle": { const inG = g.mode && (g.mode.gifts || []).includes(c.good); return `${inG ? "remove" : "add"} ${c.good} ${inG ? "from" : "to"} the embassy's gifts`; }
@@ -1942,8 +2037,10 @@ function availableCommands(g) {
   // A COURT MAY ALWAYS SET DOWN WHAT IT HAS PICKED UP. Until a cost is paid nothing has
   // been spent, so an errand can be abandoned — for another verb, or back to the choosing.
   // This used to be gated on `!m.region`: once a target was named there was no verb switch
-  // and NO WAY OUT AT ALL. endActivation still worked, because it is UNGATED and bypasses
-  // the check — so the rule lived in whether the panel happened to draw a button.
+  // and NO WAY OUT AT ALL. endActivation still worked, because it was UNGATED and bypassed
+  // the check — so the rule lived in whether the panel happened to draw a button. That
+  // exception is gone and nothing bypasses the check now, which makes THIS the only thing
+  // standing between a court and a wedged activation. test-commands.js holds it to that.
   const targeting = ["build", "remove", "tax", "entreat", "treaty", "subvert", "raid", "searaid"].includes(m.v);
   if (g.act && targeting && !g.raid && !g.contest) {
     if (!m.region) {
@@ -1965,9 +2062,13 @@ function availableCommands(g) {
       out.push({ t: "srcBack" });
     } else if (m.kind === "trade") {
       for (const t of GOODS) if (t !== m.extracted && g.players[p].stock[t] > 0) out.push({ t: "srcStockUnit", good: t });
+      // …and back to the sponsors, but only while nothing has been laid: a unit paid here is
+      // GONE, and stepping back afterwards would offer to settle a bill already part-settled.
+      if (!(m.paid || []).length) out.push({ t: "srcToChoose" });
     } else {
       for (const t of GOODS) if (g.players[p].stock[t] > 0) out.push({ t: "giftToggle", good: t });
       if ((m.gifts || []).length) out.push({ t: "giftSend" });
+      out.push({ t: "srcToChoose" });   // gifts are only promised until they are sent
     }
   }
   if (m.v === "build" && m.region) for (const bt of legalBuildTypes(g)) out.push({ t: "buildType", bt });

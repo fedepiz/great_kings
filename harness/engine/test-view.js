@@ -89,6 +89,27 @@ for (let seed = 1; seed <= 40; seed++) {
       }
     }
 
+    // ---- AND THE WAY BACK: every command on the menu is somewhere the hand can reach ----
+    // The check above is one-directional — it catches a table that offers what the engine
+    // does not. The opposite failure is quieter and was live for the whole life of `view`:
+    // "From the stockpile" on an embassy's gifts led to a step whose commands (giftToggle,
+    // giftSend) NO PANEL CARRIED. The engine offered them, the model could send them, and the
+    // player was left with one button — End activation — and an errand that could not be
+    // finished or set down. A menu entry with no home on the screen is a dead end by
+    // construction, so the walk holds the view to covering the whole menu.
+    {
+      const drawn = new Set();
+      for (const pan of v.panels) {
+        if (pan.kind === "choices") for (const o of pan.options) if (o.cmd) drawn.add(key(o.cmd));
+        if (pan.kind === "map") for (const place of Object.values(pan.regions)) {
+          for (const o of place.options) if (o.cmd) drawn.add(key(o.cmd));
+          for (const os of Object.values(place.slots)) for (const o of os) if (o.cmd) drawn.add(key(o.cmd));
+        }
+      }
+      for (const c of menu)
+        if (!drawn.has(key(c))) flag(`a ${c.t} command is on the menu but no panel carries it`, { cmd: c, chain: g.chain });
+    }
+
     // ---- the state-wide facts the table is allowed to know ----
     // THE STEP MUST ACTUALLY MOVE. `typeof v.step === "number"` is satisfied by a counter wedged
     // at zero, so that assertion alone proves nothing. Three real ones: it never goes backwards,
@@ -135,7 +156,7 @@ ok(states > 20000, `enough states to be meaningful (${states})`);
 ok(stepMoved > 100, `the step counter advances as play moves (${stepMoved} advances)`);
 const rows = Object.entries(bad).sort((a, b) => b[1].count - a[1].count);
 for (const [sig, v] of rows) console.log("     ", String(v.count).padStart(6), sig, JSON.stringify(v.sample));
-ok(rows.length === 0, "every option the table can click is a command the engine offers");
+ok(rows.length === 0, "the table and the menu agree, both ways: nothing clickable the engine did not offer, and nothing offered the table does not draw");
 
 // ---- the state where the menu and legalTargets disagree ----
 // All have passed: the only thing on offer is the reckoning. The board must light nothing.

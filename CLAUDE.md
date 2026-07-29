@@ -46,8 +46,13 @@ These are not style preferences. Every bug this project has had was a violation 
 **1. If a precondition is not in `availableCommands`, it is not a rule.** A rule enforced by a
 disabled button, or by a panel simply not drawing something, is not enforced at all — anything
 driving the game through `dispatch` will walk straight past it. `dispatch` is gated on
-`availableCommands` (bar a short `UNGATED` list), so a precondition put there is enforced for
-every caller for free.
+`availableCommands` for **every** command, with no exemptions, so a precondition put there is
+enforced for every caller for free. Do not add an exemption: it does not buy safety, it buys
+commands that can ignore the rules.
+
+The converse is now equally load-bearing: since nothing bypasses the gate, anything the menu
+fails to offer is genuinely unreachable. A missing exit is a wedged activation, not an
+inconvenience — see the way-out check in `test-commands.js`.
 
 **2. The table's whole reach into the engine is `view`, `dispatch`, `initState` — and it reads
 no field off `g`.** It holds the state so it can hand it back to `dispatch`; everything else

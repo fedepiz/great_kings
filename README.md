@@ -33,8 +33,8 @@ rulebook, and it claims to be exactly as implemented: a rules change means editi
 
 **1. `dispatch` is the whole API.** One door into the engine. It is a *total function*: any
 command in any state is either applied or refused with a chronicle line — never a throw.
-`availableCommands(g)` says what may be done; `validCmd` gates everything except a short
-`UNGATED` list.
+`availableCommands(g)` says what may be done, and `validCmd` gates every command against it
+without exemption.
 
 The consequence worth internalising: **if a precondition is not in `availableCommands`, it is
 not a rule.** A rule enforced by a disabled button, or by a panel simply not drawing something,

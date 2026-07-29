@@ -69,9 +69,10 @@ ok(junkThrow.length === 0, `${junk.length} malformed commands refused without th
 for (const th of junkThrow.slice(0, 8)) console.log("      ", th);
 
 console.log("\n— a court may always set down what it has picked up —");
-// THERE MUST ALWAYS BE A WAY OUT of an open activation, on the menu. `endActivation` is UNGATED
-// and would mask its absence, so this asserts on the gated exits: a court that can only escape
-// because a panel drew a button is not free at the engine's own level.
+// THERE MUST ALWAYS BE A WAY OUT of an open activation, and this check is the whole guarantee
+// of it. Nothing bypasses the gate, so an exit missing from the menu is an exit that does not
+// exist and a court holding an unfinishable errand cannot put it down. That class of bug is
+// silent in play and loud here, which is the trade this assertion exists to make.
 {
   let g = M.initState(), stuck = 0, checked = 0, s = 4242 >>> 0;
   const rnd = () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };

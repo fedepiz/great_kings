@@ -173,8 +173,13 @@ removed because the work is done, remove its `TODO:` comments in the same change
 
 ## Comments
 
-Comments here state rules, not history. A comment earns its place by passing one of three
-tests:
+**Never write a narrative comment.** A comment here describes how the code IS and what must
+stay true of it — never what it was, what changed, what broke, or what you just did. If you
+find yourself writing "used to", "no longer", "this was wrong", "now it reads", or recounting a
+bug, stop and write the constraint instead. That belongs in the commit message.
+
+Comments state rules, not history. A comment earns its place — whether you are writing it or
+deciding whether to keep one — by passing one of three tests:
 
 1. **It states a rule or invariant the code cannot state itself.** Keep. (`usable`'s "WHOSE IS
    IT?"; the `BT` field key; "compare `step`, never read it.")

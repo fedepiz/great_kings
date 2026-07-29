@@ -203,20 +203,20 @@ const SLETTER = { none: "", friend: "F", ally: "A", subject: "S" };
 //   capBonus   — adds to the Food Store of whoever commands the province it stands in
 //   trades     — "land" (range 3 overland) or "sea" (far harbours); annex — an organ of state
 const BT = {
-  palace: { g: "RP", name: "Royal palace" },
-  farm: { g: "FA", name: "Farm", yields: "food", byRegion: true },
-  market: { g: "MK", name: "Market", trades: "land" },
-  port: { g: "PO", name: "Port", trades: "sea" },
-  garrison: { g: "GA", name: "Garrison", unit: { reach: 1, sea: false } },
-  granary: { g: "GR", name: "Granary", capBonus: 2, issues: "food" },
-  wsB: { g: "WB", name: "Bronze works", yields: "bronze" },
-  wsC: { g: "WC", name: "Dye works", yields: "cloth" },
-  wsP: { g: "WP", name: "Potteries", yields: "pottery" },
-  chancery: { g: "CH", name: "Chancery", annex: 1 },
-  stables: { g: "ST", name: "Stables", annex: 1, unit: { reach: 3, sea: false } },
-  steward: { g: "SW", name: "Steward", annex: 1 },
-  fortress: { g: "FT", name: "Fortress", annex: 1, walls: 1 },
-  warrior: { g: "WR", name: "Warriors", annex: 1, unit: { reach: 2, sea: true } },
+  palace: { name: "Royal palace" },
+  farm: { name: "Farm", yields: "food", byRegion: true },
+  market: { name: "Market", trades: "land" },
+  port: { name: "Port", trades: "sea" },
+  garrison: { name: "Garrison", unit: { reach: 1, sea: false } },
+  granary: { name: "Granary", capBonus: 2, issues: "food" },
+  wsB: { name: "Bronze works", yields: "bronze" },
+  wsC: { name: "Dye works", yields: "cloth" },
+  wsP: { name: "Potteries", yields: "pottery" },
+  chancery: { name: "Chancery", annex: 1 },
+  stables: { name: "Stables", annex: 1, unit: { reach: 3, sea: false } },
+  steward: { name: "Steward", annex: 1 },
+  fortress: { name: "Fortress", annex: 1, walls: 1 },
+  warrior: { name: "Warriors", annex: 1, unit: { reach: 2, sea: true } },
 };
 
 
@@ -291,6 +291,7 @@ function initState() {
     passed, out, rel, b, players, spent,
     act: null, mode: null, shortfall: null,
     chain: "00000000",                     // running hash of the command stream: see THE CHAIN
+    step: 0,                               // interaction-step counter: see THE STEP
     rot: 1,
     log: [`Year 1. ${PNAME[PLAYERS[0]]} to act. (Everyone's disposition is Soft for now.)`],
   };
@@ -321,8 +322,10 @@ function usable(g, p, rid, bd) {
   if (isCrown(bd)) return bd.o === p;
   return rid === HOME[p] || rank(g, p, rid) >= 3;
 }
-const readyB = (bd) => bd && !bd.pill && !bd.tap;
-function hasActive(g, rid, t) { return (g.b[rid] || []).some((bd) => bd && bd.t === t && !bd.pill); }
+const readyB = (bd) => bd && !bd.tap;
+// Standing there at all. It does NOT ask whether the building has acted — a tapped port still
+// relays, which is what makes markets and ports a passive web rather than an action.
+function hasBuilding(g, rid, t) { return (g.b[rid] || []).some((bd) => bd && bd.t === t); }
 
 // ---- logistics ----
 // GOODS HAVE NO GEOGRAPHY; ACTIONS DO. The treasury is the king's abstract purse — it pays
@@ -343,7 +346,7 @@ function reach(g, p, start, maxd, opts) {
     if (seen[x] >= maxd) continue;
     if (!(x === start || rank(g, p, x) >= 1)) continue;
     const nbs = [...(ADJ[x] || [])];
-    if (bySea && isCoastal(x) && hasActive(g, x, "port")) for (const y of COASTAL) if (y !== x) nbs.push(y);
+    if (bySea && isCoastal(x) && hasBuilding(g, x, "port")) for (const y of COASTAL) if (y !== x) nbs.push(y);
     for (const y of nbs) if (!(y in seen)) { seen[y] = seen[x] + 1; q.push(y); }
   }
   const out = new Set(Object.keys(seen));
@@ -355,7 +358,7 @@ function overland(g, p, start, maxd) { return reach(g, p, start, maxd, { withSta
 // A port carries ONE thing across the water per tap: one cargo, or one warrior.
 function portIn(g, rid) { return (g.b[rid] || []).findIndex((bd) => bd && bd.t === "port" && readyB(bd)); }
 function overseasPorts(g, exceptRid) {
-  return REG.filter((r) => r.id !== exceptRid && isCoastal(r.id) && hasActive(g, r.id, "port")).map((r) => r.id);
+  return REG.filter((r) => r.id !== exceptRid && isCoastal(r.id) && hasBuilding(g, r.id, "port")).map((r) => r.id);
 }
 // Elementary verb: SOURCE — assemble inputs at an actor, wholly from the stockpile, or by
 // TAPS FROM ONE REGION: the actor's own region or one adjacent to it (home/Subject only).
@@ -1098,6 +1101,9 @@ const Order = { read: orderRead, allows: orderAllows, mark: orderMark, commands:
 //   notice    why a thing can or cannot be done, and what it will be worth
 //   turn      pass · forfeit · resolve the year
 //
+// Two bands are NOT drawn in the column, because the shell places them itself: `map` (the
+// board) and `chronicle` (a dialog on a desk, folded into the sheet on a phone).
+//
 // A LIST SHOWS EVERY MEMBER IT WILL EVER SHOW during a step. availableCommands naturally
 // drops what has been taken or cannot serve; the view puts those back, marked `chosen` or
 // `blocked`, so a list never grows or shrinks under the pointer.
@@ -1116,13 +1122,19 @@ const Order = { read: orderRead, allows: orderAllows, mark: orderMark, commands:
 //   { kind: "facts",   id, label, rows[] }               rows:    { label, value, warn }
 //   { kind: "sides",   id, label, columns[] }            a contest: opposed totals
 //   { kind: "map",     id, regions{} }                   the same options, indexed by PLACE
+//   { kind: "chronicle", id, lines[] }                  lines: { text, fresh }
 //
 // THE MAP is the sixth kind, and the only one that is not a list. A panel is read top to
 // bottom; a province is drawn ONCE and may host several options at once — build here, entreat
 // here, levy here — so the map cannot consume a flat list of choices. It gets the same facts
 // keyed by region:
 //
-//   regions: { NIP: { options[], slots: { 0: options[] }, subject: {…} }, … }
+//   regions: { NIP: { options[], slots: { 0: options[] }, works[], relations[], subject: {…} }, … }
+//
+// `options` and `slots` are what may be DONE here. `works`, `relations` and `subject` are what
+// IS here — one entry per slot for what is built, one per power for who stands where, and the
+// province's own standing. The interface used to read those three out of `g` directly, which
+// made `view` one of two sources rather than the only one.
 //
 // The options are the IDENTICAL shape used everywhere else, so "click the map" and "click the
 // panel" are the same act, and a province out of reach is an option with `cmd: null` and a
@@ -1272,7 +1284,43 @@ function view(g) {
       const home = PLAYERS.find((q) => HOME[q] === rid) || null;
       const holder = home || live(g).find((q) => rank(g, q, rid) >= 3) || null;
       const ally = holder ? null : live(g).find((q) => rank(g, q, rid) === 2) || null;
-      regions[rid] = { options, slots, subject: {
+
+      // WHAT STANDS HERE. One entry per slot, in slot order, so `works[i]` lines up with the
+      // ground `REG` describes at `slots[i]` — the engine pads g.b to slot count at initState,
+      // so the two are always the same length. An empty slot is `{ building: null }`.
+      //
+      // `power` IS THE OWNING KING, OR NULL. The state stores ownership in one field that
+      // holds two different kinds of thing: a power for a crown building a king holds, and
+      // the REGION'S OWN ID for everything else — a wild people's warband, and every farm,
+      // market, port, granary, garrison and workshop. That overload is load-bearing inside the
+      // engine (`usable` tests `bd.o === p`, and a region id can never equal a power letter, so
+      // no king can command a warband), but it must not cross into the interface: the table
+      // would have to decode a sentinel by knowing that region ids and power keys never
+      // collide. It reports the king or nothing, and when it reports nothing the owner is the
+      // containing province, which the caller already knows — it asked for this region.
+      const works = (g.b[rid] || []).map((bd) => (!bd ? { building: null } : {
+        building: bd.t,
+        label: BT[bd.t].name,
+        power: PLAYERS.includes(bd.o) ? bd.o : null,
+        spent: !!bd.tap,
+      }));
+
+      // WHO STANDS HERE, DIPLOMATICALLY. Facts only: the rung is named, not abbreviated, and
+      // `strained` is a flag rather than the "!" the table happens to draw.
+      //
+      // Emitted for capitals too. `relLine` used to return the word "home" and nothing else
+      // for any capital, which would have hidden a rival's influence inside one. Nobody has
+      // observed that state — ~30,000 driven states produced none, and no rule obviously
+      // forbids it — so this is closing a gap rather than fixing a sighting. `subject.home`
+      // already tells the table it may say "home" instead; that is its decision, not ours.
+      const relations = [];
+      for (const q of live(g)) {
+        const rr = g.rel[q] && g.rel[q][rid];
+        if (rr && (rr.i > 0 || rr.s !== "none"))
+          relations.push({ power: q, influence: rr.i, rung: rr.s, strained: !!rr.strained });
+      }
+
+      regions[rid] = { options, slots, works, relations, subject: {
         region: rid, home, holder, ally,
         rank: holder ? rank(g, holder, rid) : 0,
         coastal: isCoastal(rid), wild: !!r.wild,
@@ -1466,7 +1514,22 @@ function view(g) {
     .map((c) => opt(c, null, { category: c.t === "forfeit" ? "danger" : "aside" }));
   if (turn.length) panels.push({ kind: "choices", band: "turn", id: "turn", pick: "act", label: "", options: turn });
 
-  return { seat: p, effectiveSeat: effectiveSeat(g), round: g.round, panels };
+  // THE CHRONICLE. Its own band, because it is not drawn in the column — the shell places it,
+  // the way the board places the map. A floating dialog on a desk, folded into the sheet on a
+  // phone; both read the same panel. `fresh` marks the line that has just landed, which is a
+  // fact about the record; that the table draws the rest at 70% opacity is its reading of it.
+  panels.push({ kind: "chronicle", band: "chronicle", id: "chronicle",
+    lines: g.log.map((text, i) => ({ text, fresh: i === 0 })) });
+
+  return {
+    seat: p,
+    effectiveSeat: effectiveSeat(g),
+    round: g.round,
+    chain: g.chain,          // stamp a command against the view it was chosen from
+    step: g.step,            // see THE STEP — compare it, never read it
+    mapOnly: mapOnlyStep(g), // the board is the workplace; a phone may drop the panel to a peek
+    panels,
+  };
 }
 
 // ============================== THE CHAIN ==============================
@@ -1530,7 +1593,10 @@ function advanceChain(chain, cmd) {
 // genuine sequences (a contest's bidding order is not a set). So the fingerprint is exact
 // at ACTION BOUNDARIES, which is where every user of it compares — round-trip equivalence,
 // plan deltas, replay checks.
-const NOT_THE_WORLD = ["log", "chain"];
+// `step` joins them for the same reason `chain` is here: it records how the interaction went,
+// not where the pieces stand. Two routes to one board must fingerprint equal even if one of
+// them crossed more step boundaries getting there.
+const NOT_THE_WORLD = ["log", "chain", "step"];
 function canonical(v) {
   if (v === null || typeof v !== "object") return JSON.stringify(v) ?? "null";
   if (Array.isArray(v)) return "[" + v.map(canonical).join(",") + "]";
@@ -1561,10 +1627,45 @@ function dispatch(g, cmd) {
     g.log.unshift(`That is not on offer now: ${cmd.t}${cmd.rid ? " " + cmd.rid : ""}.`);
     return g;
   }
+  // READ THE STEP BEFORE APPLYING. applyCommand mutates in place and returns the SAME object —
+  // callers clone before they dispatch — so comparing stepKey(g) to stepKey(out) afterwards
+  // compares the new state to itself and the counter never moves. It did exactly that, and the
+  // whole harness stayed green, because a counter stuck at 0 is still a number.
+  const wasStep = stepKey(g);
   const out = applyCommand(g, cmd);
   out.chain = advanceChain(g.chain, cmd);      // accepted: the world moves on
+  out.step = g.step + (wasStep === stepKey(out) ? 0 : 1);
   return out;
 }
+
+// ======================== THE STEP ========================
+// A COUNTER, NOT A VALUE. It increments when the interaction crosses a boundary — an activation
+// opens or closes, the errand changes, a target gets named, a sourcing phase turns over, a raid
+// strikes, the desk passes — and holds still for everything inside one of those.
+//
+// The only legal use is `!==` against the value you saw last. It carries no information beyond
+// "different", which is deliberate: an interface that could read WHICH step this is would be
+// reading the engine's vocabulary, and deciding things from it, which is the whole failure `view`
+// exists to prevent. The signature below never leaves this file; only the integer does.
+//
+// WHY NOT USE `chain`? Because the chain advances on EVERY accepted command, including the ones
+// well inside a step — laying a third gift, adding a tap. An interface that re-arranged itself
+// on those would be unusable. The step is deliberately coarser.
+//
+// It cannot be derived by `view`, which is a pure function of one state: counting needs to know
+// what came before. So it lives on the state and `dispatch` maintains it, exactly as with the
+// chain — and like the chain it is excluded from the fingerprint.
+// `mapOnlyStep` is folded in deliberately. It is a richer function of the state than the fields
+// above — it also depends on who has passed and on whether the seat still holds a palace — so
+// without it the board could stop being the workplace while the counter held still, and an
+// interface watching the step would not re-arrange for a layout that had genuinely changed.
+// If the answer to "is the board where the work is" changes, that is a step boundary.
+const stepKey = (g) => [
+  !!g.act, g.act ? g.act.capLeft : "-",
+  g.mode ? g.mode.v : "-", g.mode && g.mode.region ? "r" : "", (g.mode && g.mode.phase) || "",
+  g.shortfall ? "s" : "", g.raid ? "raid" + g.raid.strikes : "",
+  g.contest ? "c" + g.contest.idx : "", effectiveSeat(g), mapOnlyStep(g),
+].join("|");
 // Everything below is the command itself. It never sees the stamp.
 function applyCommand(g, cmd) {
   const p = g.turn;
@@ -1673,7 +1774,6 @@ function cmdKey(c) {
 }
 function validCmd(g, cmd) {
   const avail = availableCommands(g);
-  if (["srcStockUnit", "giftToggle"].includes(cmd.t)) return avail.some((c) => c.t === cmd.t);
   return avail.some((c) => cmdKey(c) === cmdKey(cmd));
 }
 // `av` is the menu this refusal is judged against. It defaults to the live one; a caller
@@ -2005,7 +2105,7 @@ function resolveRaid(g) {
     const info = biddablePeoples(g).find((x) => x.pid === pid) || {};
     if (!winner) { g.log.unshift(`The ${R[pid].n} weigh the rival gifts, find no clear master, and keep to their hills. Everything offered stays with them.`); continue; }
     if (winner === "def" && info.seafarer) { g.log.unshift(`${PNAME[currentDefender(g) || p]} buys the ${R[pid].n} off — they take the gifts and sail home. Danegeld.`); continue; }
-    const bandI = g.b[pid].findIndex((bd) => bd && BT[bd.t].unit && !bd.tap && !bd.pill);
+    const bandI = g.b[pid].findIndex((bd) => bd && BT[bd.t].unit && !bd.tap);
     if (bandI >= 0) g.b[pid][bandI].tap = true;
     if (winner === "atk") A += 1; else D += 1;
     g.log.unshift(`One warband of the ${R[pid].n} takes the gifts and joins the ${winner === "atk" ? "raiders" : "defence"}. The rest of the offerings stay in their hills.`);
@@ -2384,14 +2484,14 @@ function biddablePeoples(g) {
     let patron = null;
     for (const q of PLAYERS) if (rank(g, q, rid) >= 2) patron = q;
     if (patron) continue; // a patron closes the bidding — their bands answer calls instead
-    if (!g.b[rid].some((bd) => bd && BT[bd.t].unit && !bd.tap && !bd.pill)) continue;
+    if (!g.b[rid].some((bd) => bd && BT[bd.t].unit && !bd.tap)) continue;
     out.push({ pid: rid, seafarer: seaf && !adj });
   }
   return out;
 }
 function fortressDef(g, p, t) {
   let d = 0;
-  (g.b[t] || []).forEach((bd) => { if (bd && BT[bd.t].walls && !usable(g, p, t, bd) && !bd.pill && !bd.tap) d += BT[bd.t].walls; });
+  (g.b[t] || []).forEach((bd) => { if (bd && BT[bd.t].walls && !usable(g, p, t, bd) && !bd.tap) d += BT[bd.t].walls; });
   return d;
 }
 // The basket buys ACCESS to a people: match-or-beat in every good, one strict excess — and the winner is joined by exactly ONE warband.
@@ -2554,7 +2654,7 @@ function finishUpkeep(g) {
       g.log.unshift(`${PNAME[q]} keeps ${keep} food against the winter; ${lost} spoils for want of a granary.`);
     }
   }
-  for (const rid of Object.keys(g.b)) g.b[rid].forEach((bd) => { if (bd) { bd.tap = false; bd.pill = false; } });
+  for (const rid of Object.keys(g.b)) g.b[rid].forEach((bd) => { if (bd) bd.tap = false; });
   g.round++;
   // the first seat rotates with the round, skipping the fallen
   const alive = live(g);
@@ -2608,9 +2708,6 @@ export {
   // WHOSE MOVE IT IS. `live` lists the seated powers; `effectiveSeat` says whose desk the
   // next command comes from, which is not always `g.turn` — a contest passes it round.
   live, effectiveSeat,
-
-  // WHETHER THE BOARD IS THE WORKPLACE, for a phone deciding how much panel to show.
-  mapOnlyStep,
 
   // ORDERS — the pivot between commands and intent. harness/engine/test-orders.js walks the
   // engine's own play through this and back, which is the command layer's regression test.

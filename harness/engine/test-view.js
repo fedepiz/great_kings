@@ -29,14 +29,17 @@ const key = (c) => JSON.stringify([c.t, c.rid, c.i, c.v, c.bt, c.good, c.side, c
 const bad = {};                       // signature -> { count, first sample }
 const flag = (sig, sample) => { if (!bad[sig]) bad[sig] = { count: 0, sample }; bad[sig].count++; };
 
-const KINDS = new Set(["notice", "note", "choices", "facts", "sides", "map"]);
+const KINDS = new Set(["notice", "note", "choices", "facts", "sides", "map", "chronicle"]);
+const RUNGS = new Set(["none", "friend", "ally", "subject"]);
 const STATES = new Set(["chosen", "available", "idle", "blocked", "satisfied"]);
 const PICKS = new Set(["one", "many", "repeat", "act"]);
 
 let states = 0, options = 0, mapRegions = 0;
+let prevStep = null, prevMapOnly = null, stepMoved = 0;
 for (let seed = 1; seed <= 40; seed++) {
   s = seed >>> 0;
   let g = M.initState();
+  prevStep = null; prevMapOnly = null;   // each seed is a fresh game: the counter starts over
   for (let step = 0; step < 4000; step++) {
     if (g.round > 20) break;
     let menu;
@@ -68,9 +71,46 @@ for (let seed = 1; seed <= 40; seed++) {
           mapRegions++;
           for (const o of place.options) eachOption(o, "map " + rid);
           for (const os of Object.values(place.slots)) for (const o of os) eachOption(o, "map " + rid + " slot");
+
+          // WHAT IS HERE, not just what may be done here. The table used to read these two out
+          // of `g` directly; now that they come through the view, this walk can hold them to
+          // their invariants in every state it reaches, which it could not do before.
+          const slotCount = (M.REG.find((r) => r.id === rid) || { slots: [] }).slots.length;
+          if (!Array.isArray(place.works) || place.works.length !== slotCount)
+            flag("works does not run parallel to the region's slots",
+              { rid, works: place.works && place.works.length, slots: slotCount });
+          for (const w of place.works || []) {
+            if (w.building === null) continue;                    // empty ground is a fact, not a gap
+            if (!M.BT[w.building]) flag("works names a building type the engine does not have", { rid, w });
+            if (w.power !== null && !M.PLAYERS.includes(w.power))
+              flag("works reports an owner that is not a power (the region-id sentinel leaked)", { rid, w });
+            if (typeof w.spent !== "boolean") flag("works does not say whether the year is spent", { rid, w });
+          }
+          for (const rr of place.relations || []) {
+            if (!M.PLAYERS.includes(rr.power)) flag("relations names a power that is not seated", { rid, rr });
+            if (!RUNGS.has(rr.rung)) flag("relations reports an unknown rung", { rid, rr });
+            if (typeof rr.influence !== "number") flag("relations reports no influence", { rid, rr });
+          }
         }
       }
     }
+
+    // ---- the state-wide facts the table is allowed to know ----
+    // THE STEP MUST ACTUALLY MOVE. `typeof v.step === "number"` is satisfied by a counter wedged
+    // at zero, which is what the first implementation shipped. So: never goes backwards, moves at
+    // least once across the walk, and — since a flip in `mapOnly` is by definition a new step —
+    // must have moved whenever that flips.
+    if (typeof v.step !== "number") flag("view carries no step counter", { step: v.step });
+    else {
+      if (prevStep !== null && v.step < prevStep) flag("the step counter went backwards", { from: prevStep, to: v.step });
+      if (prevStep !== null && v.step > prevStep) stepMoved++;
+      if (prevMapOnly !== null && v.mapOnly !== prevMapOnly && v.step === prevStep)
+        flag("mapOnly flipped without the step advancing", { mapOnly: v.mapOnly, step: v.step });
+      prevStep = v.step; prevMapOnly = v.mapOnly;
+    }
+    if (typeof v.mapOnly !== "boolean") flag("view does not say whether the board is the workplace", { mapOnly: v.mapOnly });
+    if (v.chain !== g.chain) flag("view reports a chain other than the state's", { view: v.chain, state: g.chain });
+    if (!v.panels.some((pan) => pan.kind === "chronicle")) flag("no chronicle panel", { chain: g.chain });
 
     // ---- the map covers the menu: every place-command reachable on the board ----
     const mapPan = v.panels.find((pan) => pan.kind === "map");
@@ -98,6 +138,7 @@ for (let seed = 1; seed <= 40; seed++) {
 
 console.log(`— view, over ${states} states (${options} options, ${mapRegions} drawn provinces) —`);
 ok(states > 20000, `enough states to be meaningful (${states})`);
+ok(stepMoved > 100, `the step counter advances as play moves (${stepMoved} advances)`);
 const rows = Object.entries(bad).sort((a, b) => b[1].count - a[1].count);
 for (const [sig, v] of rows) console.log("     ", String(v.count).padStart(6), sig, JSON.stringify(v.sample));
 ok(rows.length === 0, "every option the table can click is a command the engine offers");

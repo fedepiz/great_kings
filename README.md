@@ -27,8 +27,8 @@ behaves, so run it in a terminal you leave open rather than detached.
 ```
 index.html         the page; loads levant/main.js
 levant/
-  engine.js        THE RULES. No React, no JSX, no DOM. ~2,600 lines, 30 exports.
-  app.jsx          THE TABLE. The hot-seat interface. ~510 lines.
+  engine.js        THE RULES. No React, no JSX, no DOM. ~2,700 lines, 29 exports.
+  app.jsx          THE TABLE. The hot-seat interface. ~510 lines, and it reads no field off `g`.
   main.jsx         the only file that knows a DOM exists: mounts App.
   table.css        the ~30 utility classes app.jsx's layout depends on.
 
@@ -36,15 +36,14 @@ harness/
   run-all.sh       everything, in one command
   render-check.jsx does the table draw, at both sizes?
   engine/          "does the game still work?"
-    test-*.js      ten suites, 111 assertions
+    test-*.js      ten suites, 112 assertions
     test-view.js   "does the table have a second opinion?" — every option the table can
-                   click is a command the engine offers, over 50k states
+                   click is a command the engine offers, over 50k states; and every fact the
+                   view hands out is well formed in every one of them
     test-orders.js every action the engine can play, an order can describe — 1052/1052
     drive.js       plays a seeded game, prints a fingerprint
     diff.sh        replays 10 seeds against ref.cjs — a pure refactor must be identical
     check.sh       bundle + differential, quickly
-
-  KNOWN-ISSUES.md  what is wrong, and what was wrong and is now understood
 
 great-kings-player-rules.md   the rulebook, current with the engine
 ```
@@ -68,7 +67,7 @@ command in any state is either applied or refused with a chronicle line — neve
 > (which vanished once a target was named). **If a precondition is not in
 > `availableCommands`, it is not a rule.**
 
-The engine exports **30 names**, and that number is load-bearing. It was 163, of which 109 had
+The engine exports **29 names**, and that number is load-bearing. It was 163, of which 109 had
 no consumer anywhere and 13 were never called at all. An export that lets a caller ask "is this
 allowed?" some other way is a second answer to a question `availableCommands` already answers,
 and that is the shape of every bug above. See the block at the foot of `engine.js`.
@@ -99,9 +98,43 @@ the table asks "what do I show?"   → view(g)
 
 The table does **no reasoning**. It does not check whether a payment suffices, count what is
 left, or know that commands have types. It reads panels and draws them, and ships back the
-command attached to whatever was clicked. Its whole reach into the engine is `view`, `dispatch`,
-`initState`, plus `live` and `mapOnlyStep` — and neither of those last two decides what may be
-done.
+command attached to whatever was clicked.
+
+**Its whole reach into the engine is three functions** — `view`, `dispatch`, `initState` — and it
+**reads no field off `g` at all.** It holds the state so it can hand it back to `dispatch`, and
+asks `view(g)` once per render for everything else. That was not true until recently: the table
+used to read `g.b` for the building squares, `g.rel` for the province relation lines, `g.log`
+twice for the chronicle, `g.round` for the title, and `g.act`/`g.mode`/`g.raid`/`g.shortfall` to
+work out for itself which step of an interaction was in progress. None of it enforced a rule —
+and that was beside the point. The claim is *one question, one answer*; every direct read was a
+second source, and a second source is how every bug in this project got in.
+
+So `view` answers all of it:
+
+| the table needs | `view` gives |
+|---|---|
+| what is built in a province | `regions[rid].works[i]` — `{ building, label, power, spent }` per slot |
+| who stands there | `regions[rid].relations` — `{ power, influence, rung, strained }` |
+| the chronicle | a `chronicle` panel — `lines: { text, fresh }` |
+| the year, and whose seat it is | `round`, `seat` |
+| which interaction step this is | `step` — a counter (below) |
+| whether the board is the workplace | `mapOnly` |
+| what to stamp a click with | `chain` |
+
+Two of those are worth their own note. **`works[i].power` is the owning king or `null`** — the
+state keeps ownership in a field that holds a power letter for a crown building and the *region's
+own id* for everything else, which is load-bearing inside the engine (`usable` tests `bd.o === p`,
+and a region id can never equal a power letter, so no king commands a wild warband) but must not
+cross out: the table would be decoding a sentinel by knowing that two namespaces never collide.
+
+**`step` is a counter, and comparing it is the only legal use.** It advances when the interaction
+crosses a boundary and holds still inside one, so an interface can re-arrange itself at boundaries
+without fighting the player between them. It carries no information beyond *different* —
+deliberately, because a token like `"act|build|r||||Y"` invites being parsed, and then the table is
+reading the engine's vocabulary again. It cannot be derived by `view` (counting needs history), so
+it lives on the state, `dispatch` maintains it, and it is excluded from the fingerprint — exactly
+like `chain`. It is deliberately **coarser** than the chain, which advances on every command
+including ones well inside a step.
 
 `view` returns panels in a **fixed skeleton of bands**, each absent only when empty, so
 nothing moves under the hand:
@@ -110,7 +143,8 @@ nothing moves under the hand:
 actor · errand · standing · detail · commit · notice · turn
 ```
 
-Panels are `choices` · `facts` · `sides` · `notice` · `note` · `map`. Options carry facts,
+Panels are `choices` · `facts` · `sides` · `notice` · `note` · `map` · `chronicle`. The last two
+are not drawn in the column — the shell places them itself, the board and the dialog. Options carry facts,
 never appearance: `state` (chosen · available · idle · blocked), `category`, `why`, `rank`,
 `subject`. A panel carries `pick` — what its options are *to each other*: `one` · `many` ·
 `repeat` · `act`. **A blocked option has `cmd: null`** and is structurally undispatchable.

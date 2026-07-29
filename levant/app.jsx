@@ -6,26 +6,31 @@
 // =====================================================================
 
 import React, { useState, useRef } from "react";
-// THE TABLE'S WHOLE REACH INTO THE ENGINE. It was ~90 calls, then two — legalTargets for the
-// map and progressLine for the scribe — and both are gone: the board draws from `view` like
-// everything else, and the scribe desk that needed `progressLine` has been removed. What is
-// left is not the rules but the WORLD (names, colours, coordinates, neighbours) and three
-// doors: ask what the state shows (`view`), send one command (`dispatch`), start over
-// (`initState`). `live` and `mapOnlyStep` are the only other calls, and neither decides what
-// may be done — one lists the seated powers, the other says whether the board is where the
-// work is on a phone.
+// THE TABLE'S WHOLE REACH INTO THE ENGINE. It was ~90 calls. It is now THREE FUNCTIONS: ask
+// what the state shows (`view`), send one command (`dispatch`), start over (`initState`).
+// Nothing else, and in particular nothing that answers "may this be done" — that lives behind
+// `view`, which is the only question this file asks.
+//
+// The rest are the WORLD: names, colours, coordinates, neighbours, the letters a rung is drawn
+// with. Facts about the board's shape, which never change, as against its state, which the view
+// reports. `REG` holds x/y because where Ugarit sits relative to Byblos is a fact like which
+// regions border it.
 //
 // Keep this list minimal. An unused import of a rule is an invitation to enforce it here,
 // which is how every UI-enforced rule in this project got in.
 import {
-  BT, HOME, NB, PCOL, PNAME, R, REG, SLETTER,          // the world, as it is named and drawn
-  dispatch, initState, live, mapOnlyStep, view,
+  NB, PCOL, PNAME, R, REG, SLETTER,                    // the world, as it is named and drawn
+  dispatch, initState, view,
 } from "./engine.js";
 
 export default function App() {
   const [g, setG] = useState(initState);
   const upd = (fn) => setG((old) => { const n = JSON.parse(JSON.stringify(old)); fn(n); return n; });
-  const p = g.turn;
+  // ONE QUESTION, ASKED ONCE. `g` is held so it can be handed back to `dispatch`, and is never
+  // read from — every fact below comes off `v`. This used to be three separate view(g) calls
+  // per render plus a dozen direct reads of the state.
+  const v = view(g);
+  const p = v.seat;
 
   const serif = { fontFamily: "Iowan Old Style, Palatino Linotype, Palatino, Georgia, serif" };
   const mono = { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" };
@@ -35,7 +40,7 @@ export default function App() {
   // refused rather than applied to a board they never saw. Nothing else does, in a hot seat —
   // but the stamp costs nothing and it is what makes a slow agent safe on shared state later.
   // A command that arrives already stamped is left alone.
-  const go = (cmd) => upd((n) => dispatch(n, cmd && cmd.chain === undefined ? { ...cmd, chain: g.chain } : cmd));
+  const go = (cmd) => upd((n) => dispatch(n, cmd && cmd.chain === undefined ? { ...cmd, chain: v.chain } : cmd));
   const [modal, setModal] = useState(null); // { title, lines }
 
   const closeModal = () => setModal(null);
@@ -63,20 +68,21 @@ export default function App() {
     ro.observe(el);
     return () => ro.disconnect();
   }, [isMobile]);
-  // the sheet follows the step: peek when the map is where the work is, half when it is not.
-  // it moves only when the STEP changes, so a hand-dragged height is never yanked away.
-  const mapStep = mapOnlyStep(g);
-  const stepSig = [!!g.act, g.mode ? g.mode.v : "-", g.mode && g.mode.region ? "r" : "",
-    (g.mode && g.mode.phase) || "", g.shortfall ? "s" : "",
-    g.raid ? "raid" + g.raid.strikes : "", g.turn].join("|");
-  const lastStep = useRef("");
+  // THE SHEET FOLLOWS THE STEP: a peek when the board is where the work is, half when it is not.
+  // It moves only when the step CHANGES, so a hand-dragged height is never yanked away.
+  //
+  // `v.step` is a counter and the only thing this may do with it is compare it. The table used
+  // to build this signal itself, out of `g.act`, `g.mode.v`, `g.mode.region`, `g.mode.phase`,
+  // `g.shortfall` and `g.raid.strikes` — which meant knowing the engine's own vocabulary for
+  // modes and phases, and silently missing any boundary added later.
+  const lastStep = useRef(-1);
   React.useEffect(() => {
-    if (!isMobile) { lastStep.current = stepSig; return; }
-    if (lastStep.current === stepSig) return;
-    lastStep.current = stepSig;
+    if (!isMobile) { lastStep.current = v.step; return; }
+    if (lastStep.current === v.step) return;      // same step: leave a dragged height alone
+    lastStep.current = v.step;
     setSheetDragH(null);
-    setSheet(mapStep ? 0 : 1);
-  }, [stepSig, isMobile, mapStep]);
+    setSheet(v.mapOnly ? 0 : 1);
+  }, [v.step, isMobile, v.mapOnly]);
 
   const onSheetDown = (e) => { sheetDrag.current = { y: e.clientY, h: sheetDragH ?? SNAPS()[sheet] }; };
   const onSheetMove = (e) => {
@@ -136,24 +142,20 @@ export default function App() {
   const cx = (r) => r.x + regW(r) / 2;
   const cy = (r) => r.y + regH / 2;
 
-  // A power's own capital says "home" rather than a relation to itself. Every seat has one:
-  // this used to name only Egypt and Hatti, from when there were fewer of them, so the other
-  // three capitals drew relation numbers where the first two drew a word.
-  function relLine(rid) {
-    for (const q of Object.keys(HOME)) if (rid === HOME[q]) return [[q, "home", PCOL[q]]];
-    const parts = [];
-    for (const q of live(g)) {
-      const rr = g.rel[q][rid];
-      if (rr && (rr.i > 0 || rr.s !== "none")) parts.push([q, `${rr.i}${SLETTER[rr.s]}${rr.strained ? "!" : ""}`, PCOL[q]]);
-    }
-    return parts;
-  }
+  // A capital says "home" rather than its king's relation to himself. Everything else lists who
+  // stands there. Both readings are drawn from the region's own facts — `subject.home` and
+  // `relations` — so this no longer walks `g.rel` or asks the engine who is seated.
+  const relLine = (place) => {
+    if (place.subject.home) return [[place.subject.home, "home", PCOL[place.subject.home]]];
+    return (place.relations || []).map((rr) =>
+      [rr.power, `${rr.influence}${SLETTER[rr.rung]}${rr.strained ? "!" : ""}`, PCOL[rr.power]]);
+  };
 
   // ---- the panel's sections, each with one home, so desktop and phone can place them differently ----
   const titleBlock = () => (<>
           <div className="flex items-baseline justify-between">
             <h1 className="text-xl" style={serif}>The Great Kings</h1>
-            <span style={mono} className="text-xs opacity-70">round {g.round} · five kings</span>
+            <span style={mono} className="text-xs opacity-70">round {v.round} · five kings</span>
           </div>
   </>);
   // ============ THE TABLE DRAWS WHAT THE STATE SAYS ============
@@ -176,6 +178,15 @@ export default function App() {
   };
   // a seat is an organ of state, a mercenary is bought: both behave unlike their neighbours
   const BY_CATEGORY = { seat: "#5C4322", mercenary: "#463655", danger: "#5C2B2B", terminal: "#2F5548" };
+  // WHAT A BUILDING LOOKS LIKE IN A 26-PIXEL SQUARE. These lived in the engine's `BT` table as
+  // `BT[t].g`, which made the rules carry a display string: "WB" is not a fact about a bronze
+  // works, it is two characters that fit the box this table happens to draw. `BT[t].name` is
+  // different and stayed — the engine writes chronicle prose and needs the words.
+  const GLYPH = {
+    palace: "RP", farm: "FA", market: "MK", port: "PO", garrison: "GA", granary: "GR",
+    wsB: "WB", wsC: "WC", wsP: "WP",
+    chancery: "CH", stables: "ST", steward: "SW", fortress: "FT", warrior: "WR",
+  };
   const drawOption = (o, k) => {
     const look = LOOK[o.state] || LOOK.available;
     const tint = o.state === "available" && BY_CATEGORY[o.category];
@@ -261,7 +272,7 @@ export default function App() {
     problem: { mark: "✕", color: "#E09070" },
   };
   const band = (name) => {
-    const ps = view(g).panels.filter((pan) => pan.band === name);
+    const ps = v.panels.filter((pan) => pan.band === name);
     if (!ps.length) return null;
     return (
       <div key={name} className={name === "turn" ? "mt-4 pt-3" : "mt-2"}
@@ -274,8 +285,13 @@ export default function App() {
   // THE MAP'S PANEL. Its own band, because it is not drawn in the column — the board places
   // it. `mapOf(rid)` is the whole of what the table knows about a province's standing and
   // what may be done there; there is no second route.
-  const mapPanel = view(g).panels.find((pan) => pan.kind === "map") || { regions: {} };
-  const EMPTY_REGION = { options: [], slots: {}, subject: {} };
+  const mapPanel = v.panels.find((pan) => pan.kind === "map") || { regions: {} };
+  // THE CHRONICLE, from the view like everything else. Its own band, because the shell places
+  // it rather than the column: a floating dialog on a desk, folded into the sheet on a phone.
+  // Both draw the same panel. `fresh` is the state saying which line has just landed; drawing
+  // the rest at 70% opacity is this table reading that.
+  const chronicle = (v.panels.find((pan) => pan.kind === "chronicle") || { lines: [] }).lines;
+  const EMPTY_REGION = { options: [], slots: {}, subject: {}, works: [], relations: [] };
   const mapOf = (rid) => mapPanel.regions[rid] || EMPTY_REGION;
   // A place may host several options at once; the first that may be taken is what a click on
   // it means. A blocked one still carries its `why`, which is what the hover says.
@@ -284,7 +300,7 @@ export default function App() {
   // THE COURTS as the state reports them: stores, what is due, what winter will take. The
   // panel used to compute the spoilage itself — a rule in a card. It reads facts now.
   const powerCards = () => (<>
-          {view(g).panels.filter((pan) => String(pan.id).startsWith("court:")).map((pan, k) => (
+          {v.panels.filter((pan) => String(pan.id).startsWith("court:")).map((pan, k) => (
             <div key={k} className="mt-3 p-2 rounded"
               style={{ background: pan.subject.self ? "#3A3226" : "#332C21", border: "1px solid #54492F" }}>
               <div className="flex justify-between text-sm">
@@ -311,9 +327,9 @@ export default function App() {
                 <button className="text-xs px-2 py-0.5 rounded" style={{ background: "#54492F" }} onClick={() => setG(initState())}>reset</button>
               </div>
               <div className="mt-1 p-2 rounded text-xs leading-relaxed" style={{ background: "#241F16", maxHeight: 230, overflowY: "auto", ...mono }}>
-                {g.log.map((l, i) => (
-                  <div key={i} className={i === 0 ? "" : "opacity-70"} style={{ cursor: "pointer" }}
-                    onClick={() => setModal({ title: "From the chronicle", lines: [l] })}>{l}</div>
+                {chronicle.map((ln, i) => (
+                  <div key={i} className={ln.fresh ? "" : "opacity-70"} style={{ cursor: "pointer" }}
+                    onClick={() => setModal({ title: "From the chronicle", lines: [ln.text] })}>{ln.text}</div>
                 ))}
               </div>
             </div>
@@ -363,7 +379,10 @@ export default function App() {
                   {r.wild ? "⌃ " : ""}{r.n}{home ? " ✶" : ""}{r.f > 0 ? `  ·  f${r.f}` : ""}{r.wild ? "  ·  wild" : ""}
                 </text>
                 {r.slots.map((s, i) => {
-                  const bd = g.b[r.id][i];
+                  // what is built here, from the view. `works` runs parallel to `r.slots`:
+                  // REG says what the GROUND is (sea, a resource, plain), the view says what
+                  // STANDS on it. An empty slot is `{ building: null }`, never absent.
+                  const w = (place.works || [])[i] || { building: null };
                   const sx = r.x + PADX + i * (SLOT + GAP);
                   const sy = r.y + HEAD;
                   // whether this slot may be clicked, and what the click MEANS — opening a
@@ -381,24 +400,28 @@ export default function App() {
                           fill={s.c ? "#C7D5E2" : s.res ? "#D9C08F" : "#EFE7CE"}
                           stroke={hotS ? "#7A3B0E" : "#A69770"} strokeWidth={hotS ? 2.5 : 1} />
                       )}
-                      {!bd && (s.c || s.res) && (
+                      {!w.building && (s.c || s.res) && (
                         <text x={sx + SLOT / 2} y={sy + SLOT / 2 + 3} fontSize="8" textAnchor="middle" fill="#54492F" style={mono}>
                           {s.c ? "sea" : { copper: "Cu", cloth: "Dy", clay: "Ky" }[s.res]}
                         </text>
                       )}
-                      {bd && (
-                        <g transform={bd.tap || bd.pill ? `rotate(12 ${sx + SLOT / 2} ${sy + SLOT / 2})` : undefined} opacity={bd.tap && !bd.pill ? 0.5 : 1}>
+                      {w.building && (
+                        // tilted and faded once it has acted: a building's year is spent.
+                        // `w.power` is the owning king or null — a province's own work, and a
+                        // wild people's warband, both come back null and take the neutral brown.
+                        <g transform={w.spent ? `rotate(12 ${sx + SLOT / 2} ${sy + SLOT / 2})` : undefined} opacity={w.spent ? 0.5 : 1}>
+                          <title>{w.label}</title>
                           <rect x={sx + 3} y={sy + 3} width={SLOT - 6} height={SLOT - 6} rx="4"
-                            fill={bd.pill ? "#D9A6A0" : "#F5EDD8"}
-                            stroke={PCOL[bd.o] || "#8A6A2F"} strokeWidth="2.2" />
-                          <text x={sx + SLOT / 2} y={sy + SLOT / 2 + 3.5} fontSize="10" textAnchor="middle" fill="#2A241B" style={mono}>{BT[bd.t].g}</text>
+                            fill="#F5EDD8"
+                            stroke={w.power ? PCOL[w.power] : "#8A6A2F"} strokeWidth="2.2" />
+                          <text x={sx + SLOT / 2} y={sy + SLOT / 2 + 3.5} fontSize="10" textAnchor="middle" fill="#2A241B" style={mono}>{GLYPH[w.building]}</text>
                         </g>
                       )}
                     </g>
                   );
                 })}
                 <text x={r.x + PADX} y={r.y + regH - 6} fontSize="9" style={mono}>
-                  {relLine(r.id).map(([q, s, col], i) => (
+                  {relLine(place).map(([q, s, col], i) => (
                     <tspan key={q} fill={col}>{i > 0 ? "  " : ""}{PNAME[q].slice(0, 2)} {s}</tspan>
                   ))}
                 </text>
@@ -434,9 +457,9 @@ export default function App() {
                 </div>
               </div>
               <div className="p-2 rounded text-xs" style={{ background: "#241F16", maxHeight: "44vh", overflowY: "auto", lineHeight: 1.65, ...mono }}>
-                {g.log.map((l, i) => (
-                  <div key={i} className={i === 0 ? "" : "opacity-70"} style={{ cursor: "pointer" }}
-                    onClick={() => setModal({ title: "From the chronicle", lines: [l] })}>{l}</div>
+                {chronicle.map((ln, i) => (
+                  <div key={i} className={ln.fresh ? "" : "opacity-70"} style={{ cursor: "pointer" }}
+                    onClick={() => setModal({ title: "From the chronicle", lines: [ln.text] })}>{ln.text}</div>
                 ))}
               </div>
             </div>

@@ -46,9 +46,9 @@ function sweep(seeds, rounds) {
         g = M.dispatch(clone(g), esc); action = []; soFar = []; startState = clone(g); continue;
       }
       // COHERENT PLAY ONLY. An order describes an INTENTION, so a trace with no intention
-      // behind it — a gift toggled on and off, a verb chosen and abandoned — is not
-      // something an order should be able to say. These are the same three rules the corpus
-      // generator walks by, and without them this test measures nonsense.
+      // behind it — a gift toggled on and off, a verb chosen and abandoned — is not something
+      // an order should be able to say. Without these three filters the walk generates
+      // incoherent traces and this suite measures nonsense.
       const committed = !!(g.mode && g.mode.v && g.mode.v !== "source");
       let choices = menu
         .filter((c) => !(committed && c.t === "verb"))                        // no dithering
@@ -116,7 +116,4 @@ const rr = M.Order.commands(M.initState(), nonsense);
 ok(!rr.commands.length, "an order naming what does not exist produces no commands");
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
-// This read `fail ? 0 : 0` — the suite the README calls the command layer's regression test
-// could not fail, whatever it found. Both branches returned success, so run-all.sh printed its
-// count and moved on.
 process.exit(fail ? 1 : 0);

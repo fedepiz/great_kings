@@ -2,22 +2,15 @@
 # =====================================================================
 # run-all.sh — everything. Run before calling any engine change done.
 # =====================================================================
-# There is no artifact assembly step any more, so the three guards this file used to carry
-# against a build that lied — a stale bundle, a duplicate declaration from concatenating two
-# sources, a stray import surviving the assembly — have nothing left to guard. What replaced
-# them is simpler and stricter: every check below reads levant/engine.js and levant/app.jsx
-# as written.
+# EVERY CHECK BELOW READS THE SOURCES AS WRITTEN — levant/engine.js and levant/app.jsx — and
+# none of them inspects build output. A guard that only ever looks at build output cannot see a
+# fault in whatever the build throws away.
 #
-# The one lesson from that era still worth keeping: A GUARD THAT ONLY EVER LOOKS AT BUILD
-# OUTPUT CANNOT SEE A FAULT IN WHAT THE BUILD THROWS AWAY. Nothing here looks at build output.
-# =====================================================================
 # pipefail IS LOAD-BEARING, not tidiness. Every check below pipes its output through grep or
 # sed to indent it, and without pipefail a pipeline reports the exit status of the LAST command
-# — so `node test.js | sed …` succeeds no matter what the test did. That is not hypothetical:
-# the render smoke test this file used to run was invoked as `node smoke.cjs | head -1`, and it
-# had been FAILING — asserting on a string the interface does not render. `head` exited 0, so
-# `set -e` never fired, and `head -1` printed the one line before the error message. run-all.sh
-# reported a pass on a failing test, for as long as that test existed.
+# — so `node test.js | sed …` succeeds no matter what the test did, and this script reports a
+# pass on a failing suite. Do not add a pipe here without checking that a failure still
+# propagates; `head` and `tail` in particular swallow both the message and the status.
 set -eo pipefail
 cd "$(dirname "$0")/.."
 
@@ -39,10 +32,9 @@ else
   ./harness/engine/diff.sh
 fi
 
-# A SUITE'S EXIT CODE IS THE RESULT; its count line is only a summary. This loop used to print
-# the count and drop the status on the floor, which meant `test-orders.js` — whose exit was
-# `fail ? 0 : 0` and could not report a failure at all — looked identical to a passing suite.
-# Now a non-zero exit prints the whole run and stops everything.
+# A SUITE'S EXIT CODE IS THE RESULT; its count line is only a summary. Print the count and drop
+# the status, and a suite that cannot report a failure looks identical to a passing one. A
+# non-zero exit prints the whole run and stops everything.
 echo "— engine suites —"
 cd harness/engine
 for f in economy ownership war raid subvert verbs commands hash orders view; do

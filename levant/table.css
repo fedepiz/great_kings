@@ -1,16 +1,18 @@
 /* =====================================================================
  *  THE GREAT KINGS — the utility classes the table uses
  * =====================================================================
- *  app.jsx was written inside an environment where Tailwind happened to be on the page, so
- *  its layout is half inline styles and half utility class names. Those class names are the
- *  only reason the panel spaces itself; without them the interface renders as one
- *  undifferentiated column. Rather than take a framework and a config file for thirty-one
- *  rules, they are written out here.
+ *  app.jsx's layout is half inline styles and half Tailwind-shaped utility class names. Those
+ *  class names are the only reason the panel spaces itself; without them the interface renders
+ *  as one undifferentiated column. Rather than take a framework and a config file for three
+ *  dozen rules, they are written out here.
  *
- *  THIS IS NOT TAILWIND AND IS NOT TRYING TO BE. It covers exactly the classes app.jsx uses
- *  and nothing else — so a class name that is not in this file does nothing, silently, which
- *  is the one hazard worth knowing about. If you reach for a utility that is not here, add
- *  the rule; do not assume it exists because Tailwind has it.
+ *  THIS IS NOT TAILWIND AND IS NOT TRYING TO BE. It covers the classes app.jsx uses and
+ *  nothing more — so A CLASS NAME THAT IS NOT IN THIS FILE DOES NOTHING, SILENTLY, which is
+ *  the one hazard worth knowing about. If you reach for a utility that is not here, add the
+ *  rule; do not assume it exists because Tailwind has it.
+ *
+ *  Some are used only inside computed strings (`grid grid-cols-2 gap-1`, `mt-4 pt-3`), so
+ *  grepping app.jsx for `className="…"` will not find every one of them.
  * ===================================================================== */
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -24,7 +26,6 @@ button { font: inherit; color: inherit; border: 0; background: none; }
 .grid          { display: grid; }
 .grid-cols-2   { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .items-baseline{ align-items: baseline; }
-.items-start   { align-items: flex-start; }
 .justify-between { justify-content: space-between; }
 
 /* gaps */

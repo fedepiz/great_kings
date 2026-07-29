@@ -6,18 +6,18 @@
 // =====================================================================
 
 import React, { useState, useRef } from "react";
-// THE TABLE'S WHOLE REACH INTO THE ENGINE. It was ~90 calls. It is now THREE FUNCTIONS: ask
-// what the state shows (`view`), send one command (`dispatch`), start over (`initState`).
-// Nothing else, and in particular nothing that answers "may this be done" — that lives behind
-// `view`, which is the only question this file asks.
+// THE TABLE'S WHOLE REACH INTO THE ENGINE IS THREE FUNCTIONS: ask what the state shows
+// (`view`), send one command (`dispatch`), start over (`initState`). Nothing else, and in
+// particular nothing that answers "may this be done" — that lives behind `view`, which is the
+// only question this file asks.
 //
 // The rest are the WORLD: names, colours, coordinates, neighbours, the letters a rung is drawn
 // with. Facts about the board's shape, which never change, as against its state, which the view
 // reports. `REG` holds x/y because where Ugarit sits relative to Byblos is a fact like which
 // regions border it.
 //
-// Keep this list minimal. An unused import of a rule is an invitation to enforce it here,
-// which is how every UI-enforced rule in this project got in.
+// KEEP THIS LIST MINIMAL. An imported rule is an invitation to enforce it here, and a rule
+// enforced here is not enforced at all — see CLAUDE.md.
 import {
   NB, PCOL, PNAME, R, REG, SLETTER,                    // the world, as it is named and drawn
   dispatch, initState, view,
@@ -26,9 +26,9 @@ import {
 export default function App() {
   const [g, setG] = useState(initState);
   const upd = (fn) => setG((old) => { const n = JSON.parse(JSON.stringify(old)); fn(n); return n; });
-  // ONE QUESTION, ASKED ONCE. `g` is held so it can be handed back to `dispatch`, and is never
-  // read from — every fact below comes off `v`. This used to be three separate view(g) calls
-  // per render plus a dozen direct reads of the state.
+  // ONE QUESTION, ASKED ONCE PER RENDER. `g` is held so it can be handed back to `dispatch`,
+  // and is never read from — every fact below comes off `v`. If something is missing from `v`,
+  // the fix is a field on the view, not a read of `g` here.
   const v = view(g);
   const p = v.seat;
 
@@ -71,10 +71,9 @@ export default function App() {
   // THE SHEET FOLLOWS THE STEP: a peek when the board is where the work is, half when it is not.
   // It moves only when the step CHANGES, so a hand-dragged height is never yanked away.
   //
-  // `v.step` is a counter and the only thing this may do with it is compare it. The table used
-  // to build this signal itself, out of `g.act`, `g.mode.v`, `g.mode.region`, `g.mode.phase`,
-  // `g.shortfall` and `g.raid.strikes` — which meant knowing the engine's own vocabulary for
-  // modes and phases, and silently missing any boundary added later.
+  // `v.step` is a counter and COMPARING IT IS THE ONLY LEGAL USE. Deriving this signal here
+  // instead — out of modes, phases and raid state — would mean knowing the engine's own
+  // vocabulary, and silently missing any boundary added to it later.
   const lastStep = useRef(-1);
   React.useEffect(() => {
     if (!isMobile) { lastStep.current = v.step; return; }
@@ -143,8 +142,8 @@ export default function App() {
   const cy = (r) => r.y + regH / 2;
 
   // A capital says "home" rather than its king's relation to himself. Everything else lists who
-  // stands there. Both readings are drawn from the region's own facts — `subject.home` and
-  // `relations` — so this no longer walks `g.rel` or asks the engine who is seated.
+  // stands there. Both readings come from the region's own facts — `subject.home` and
+  // `relations` — never from walking `g.rel`.
   const relLine = (place) => {
     if (place.subject.home) return [[place.subject.home, "home", PCOL[place.subject.home]]];
     return (place.relations || []).map((rr) =>
@@ -178,10 +177,10 @@ export default function App() {
   };
   // a seat is an organ of state, a mercenary is bought: both behave unlike their neighbours
   const BY_CATEGORY = { seat: "#5C4322", mercenary: "#463655", danger: "#5C2B2B", terminal: "#2F5548" };
-  // WHAT A BUILDING LOOKS LIKE IN A 26-PIXEL SQUARE. These lived in the engine's `BT` table as
-  // `BT[t].g`, which made the rules carry a display string: "WB" is not a fact about a bronze
-  // works, it is two characters that fit the box this table happens to draw. `BT[t].name` is
-  // different and stayed — the engine writes chronicle prose and needs the words.
+  // WHAT A BUILDING LOOKS LIKE IN A 26-PIXEL SQUARE, and therefore this table's business, not
+  // the engine's: "WB" is not a fact about a bronze works, it is two characters that fit the box
+  // drawn below. `BT[t].name` is the opposite case and rightly lives in the engine — the
+  // chronicle is prose and needs the words.
   const GLYPH = {
     palace: "RP", farm: "FA", market: "MK", port: "PO", garrison: "GA", granary: "GR",
     wsB: "WB", wsC: "WC", wsP: "WP",
@@ -258,9 +257,9 @@ export default function App() {
       );
     return null;
   };
-  // draw the state's own panels, chosen by id. The table never decides WHETHER a panel
+  // draw the state's own panels, chosen by band. The table never decides WHETHER a panel
   // applies — the state simply does not emit one that does not.
-  // THE SKELETON. Six bands, always in this order, each absent only when it holds nothing.
+  // THE SKELETON. Seven bands, always in this order, each absent only when it holds nothing.
   // Position carries meaning: the exits are always last and always in the same place, so
   // nothing lands under the hand where something else used to be.
   const BANDS = ["actor", "errand", "standing", "detail", "commit", "notice", "turn"];
@@ -297,8 +296,8 @@ export default function App() {
   // it means. A blocked one still carries its `why`, which is what the hover says.
   const takeable = (os) => (os || []).find((o) => o.cmd) || null;
 
-  // THE COURTS as the state reports them: stores, what is due, what winter will take. The
-  // panel used to compute the spoilage itself — a rule in a card. It reads facts now.
+  // THE COURTS as the state reports them: stores, what is due, what winter will take. Every
+  // number here is read, never computed — spoilage is a rule (`foodRots`), not a card's sum.
   const powerCards = () => (<>
           {v.panels.filter((pan) => String(pan.id).startsWith("court:")).map((pan, k) => (
             <div key={k} className="mt-3 p-2 rounded"
@@ -315,8 +314,8 @@ export default function App() {
             </div>
           ))}
   </>);
-  // THE PANEL IS THE SKELETON. Every branch it used to hold — which building, which verb,
-  // the sourcing, the assembly, the bidding — is a band the state fills or leaves empty.
+  // THE PANEL IS THE SKELETON, and holds no branches of its own. Which building, which verb,
+  // the sourcing, the assembly, the bidding — each is a band the state fills or leaves empty.
   const actionPanel = () => bands();
 
   const chronicleBlock = () => (<>

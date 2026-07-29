@@ -1,18 +1,14 @@
 // =====================================================================
 // render-check.jsx — does the table actually draw, at both sizes?
 // =====================================================================
-// This renders THE SOURCE. That distinction is the whole point of the file.
-//
-// There used to be three of these, and they all imported a concatenated single-file build of
-// engine.js + app.jsx. Guards like that cannot see a fault in anything the build throws away:
-// app.jsx once imported `view` TWICE — not valid JavaScript — and every check downstream
-// passed, because the assembly step stripped the import block before compiling. There is no
-// assembly step now. The bundler reads app.jsx as written, so a broken import is a broken
-// build, and this file only has to answer the question its name asks.
+// This renders THE SOURCE — app.jsx as written, through the bundler. That is the whole point of
+// the file: a check that reads assembled output instead cannot see a fault in anything the
+// assembly throws away, and an import block is exactly the sort of thing an assembly step
+// rewrites. A broken import must be a broken build here.
 //
 // It is a smoke test and nothing more: it asserts the interface renders without throwing and
 // that the landmarks are present. What the panels SAY is harness/engine/test-view.js's job,
-// over 50,178 states — not this file's.
+// over tens of thousands of states — not this file's.
 // =====================================================================
 import React from "react";
 import { renderToString } from "react-dom/server";
@@ -32,11 +28,9 @@ const ok = (c, m) => { console.log(c ? "  ✓ " + m : "  ✗ FAIL: " + m); if (!
 // sea and its provinces, the actor band, the power cards, and the exits band that `view` puts
 // last in every state.
 //
-// PICK STRINGS THE INTERFACE ACTUALLY RENDERS. The test this replaced asserted on "stores",
-// which appears nowhere in the initial render — it had been failing, and the failure was
-// invisible because run-all.sh piped it through `head -1` without `pipefail`, so the message
-// was truncated away and the exit code was discarded. A landmark you have not seen in the
-// output is a landmark you are guessing at.
+// PICK STRINGS THE INTERFACE ACTUALLY RENDERS. A landmark you have not seen in the output is a
+// landmark you are guessing at — and an assertion on a string that is never drawn fails
+// silently forever. Before adding one here, render and grep for it.
 const LANDMARKS = [
   "The Great Kings",           // title block
   "THE GREAT SEA",             // the map's own furniture

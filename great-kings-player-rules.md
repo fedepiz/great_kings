@@ -59,13 +59,13 @@ A raid is LAND or SEA, never mixed. Land: garrisons (reach 1), warriors (2), sta
 5. Everything untaps; the embassy ledger clears; a new year begins.
 
 ## 11. Forfeit
-A player may dissolve at any time: palaces and seat buildings are pulled down; every other building was always the region's and simply remains; all ties zero; the home becomes ordinary courtable ground; the player takes no further turn.
+A player may dissolve at any time: palaces and seat buildings are pulled down; every other building was always the region's and simply remains; all ties zero; the home becomes ordinary courtable ground; the player takes no further turn. Forfeiting takes TWO words — the first arms it, the second carries it out — so no single misclick ends a court.
 
 ## 12. Not in this build
 Dispositions beyond universal Soft, events, scoring and victory, campaigns, player-to-player trade, fisheries. The game currently ends when the players stop.
 
 ## 13. Advice to the table — tips & pitfalls
-*(Human players may skip this; the AI courts receive it as part of their rules.)*
+*(Skippable: nothing below is a rule, and no rule above depends on it.)*
 
 GLOSSARY — the words that matter: COMMAND: one verb use; every verb costs exactly ONE command; "rN" always means RANGE N, never a cost. SEAT BUILDING: one of exactly five — chancery, stables, steward, fortress, warrior; no other building is ever a seat building. SEAT: a province where one of YOUR seat buildings stands. PRODUCER: a building that yields goods when tapped — farm, bronze works, dye works, potteries. EMBASSY: a single entreat bearing gifts; an action, not a building. TAPPED: has acted this year; taps clear only after upkeep at year's end. FLOOR: the influence a rank never falls below (Friend 2 / Ally 5 / Subject 10). STRAINED (!): below its floor; breaks at next upkeep unless restored. THE FOOD STORE: what survives the turning of the year — 1 for the palace, 2 per granary; food above it spoils.
 

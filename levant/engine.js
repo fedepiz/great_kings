@@ -11,91 +11,13 @@
 //
 //  The engine's export list is at the foot of this file, and it is deliberately short.
 //  Read it before adding to it.
+//
+//  HOUSE STYLE, THE TWO INVARIANTS, AND HOW TO PROVE A CHANGE ARE IN ../CLAUDE.md.
+//  Read them before editing this file. The short version: one general path specialised by
+//  data, specialisation as a field rather than a branch, no if-chain that grows an arm per
+//  case, dispatch total and gated on availableCommands, flat and short. `npm test` must hold
+//  at 10/10 differential seeds unless you meant to change the rules.
 // =====================================================================
-//
-// ==================================================================
-//                      HOUSE STYLE — READ BEFORE EDITING
-// ==================================================================
-// This engine is written one way on purpose. It has been refactored into this
-// shape deliberately, and it will rot back into a thicket the first time someone
-// adds "just one more branch". If you are changing the engine — human or model —
-// the rules below are not suggestions.
-//
-// 1. ONE GENERAL PATH, SPECIALISED BY DATA.
-//    If two things differ only in their parameters, they are ONE thing. Write the
-//    general case once and let the differences be values. Surface differences are
-//    not real differences until you have tried to unify them and failed.
-//      worked examples in this file:
-//        ACTIONS   — every verb's range, cost, targets and commit. legalTargets and
-//                    clickRegion are dispatchers over it, not chains. searaid is
-//                    literally `ACTIONS.searaid = ACTIONS.raid` — one verb, two elements.
-//        g.contest — every auction. A raid partitions players into two parties over
-//                    one lot per wild people; a subversion makes each player their own
-//                    party over one lot. Same machinery, different partition.
-//        reach()   — every "how far from here?". An army's road and an envoy's route
-//                    are the same walk with a `bySea` flag.
-//        works()   — every "which buildings are…?". One walk plus a predicate.
-//
-// 2. SPECIALISATION IS A FIELD, NOT A BRANCH.
-//    Variants are toggles on a struct — `kind`, `binding`, `party`, `oncePerYear` —
-//    read by one code path. A switch on a kind tag is allowed ONLY where the behaviour
-//    is genuinely irreducible, and it belongs at the leaf, never at the root. The
-//    contest switches on `kind` in exactly one place: the payout, because a warband
-//    and a stripped influence really are different things.
-//
-// 3. FAT STRUCTS, AND ZERO IS A VALID DEFAULT.
-//    One struct carries the union of fields across variants; absent means "no". BT is
-//    the model: `yields`, `unit`, `walls`, `capBonus`, `annex` — the engine reads
-//    fields, it does not switch on building type. No constructor ceremony, no
-//    "is it initialised yet" checks.
-//
-// 4. NO "EVERY CASE GETS A CODE PATH".
-//    An if-chain that grows one arm per case is the smell this file was cleaned of.
-//    Adding a verb means adding an entry to ACTIONS. Adding a seat building means an
-//    entry in ANNEX_ACTORS (its `verbs` live there — do not re-list them elsewhere).
-//    Adding a cost means a `cost` spec; the three cost interpreters are the ONLY code
-//    that knows what a cost means. If you find yourself typing `if (m.v === …)` or
-//    `if (bd.t === …)` outside a table, stop: the knowledge belongs in the table.
-//    A uniform rule beats a special case even when it changes behaviour slightly.
-//
-// 5. TOTAL FUNCTIONS, AND A WORLD THAT CANNOT BE ACTED ON TWICE.
-//    dispatch() IS THE API.
-//    The UI, the tests, and any future AI or network peer all drive the game through
-//    dispatch(). It must be total: every command, in every state, is carried out or
-//    refused — never a crash. That is what the gate at the top of dispatch is for.
-//    Do not scatter null-checks through the cases; if a command needs a precondition,
-//    it belongs in availableCommands so the gate enforces it for free.
-//
-//    The same gate enforces FRESHNESS. Every accepted command advances a hash of the
-//    command history (see THE CHAIN); anyone issuing a command may carry the chain of
-//    the world it was written against, and the gate refuses it if the world has moved.
-//    This is what makes a slow agent safe on shared state: a model call takes seconds, and
-//    in that time a player may click or another court may act. Without the stamp, an answer
-//    written for one board is applied to another — and the dangerous case is not an illegal
-//    command but a LEGAL one whose meaning changed underneath it.
-//    Callers stamp; the core decides. Do not add per-agent locks or turn checks in the
-//    interface to compensate — that was the old way, and it protected nothing.
-//
-// 6. FLAT AND SHORT.
-//    Shallow nesting, small functions, control flow you can read straight down.
-//    clickRegion is eight lines. Keep it that way.
-//
-// ---- HOW TO PROVE YOU DID NOT BREAK ANYTHING ----
-//    The command layer is deterministic, so a refactor is checkable, not hopeable.
-//    A PURE REFACTOR (no behaviour change intended) must produce byte-identical play:
-//      harness/test-hash.js — the freshness guarantee: refusals do not advance the chain,
-//                           stale stamps are refused, bare commands still work.
-//      harness/check.sh   — build, bundle, then replay 10 seeded games against
-//                           harness/ref.cjs and compare chronicle hash, stores and
-//                           influence. Anything less than 10/10 identical means you
-//                           changed behaviour, whether you meant to or not.
-//    A DELIBERATE RULES CHANGE will and should shift that fingerprint — so update the
-//    reference bundle only when you intended the change, and reach for the behavioural
-//    suites instead: harness/test-{economy,ownership,war,raid,subvert,verbs,commands}.js
-//    Add coverage for a mechanic BEFORE refactoring it. Random play is uneven: it lands
-//    trade ~1900 times per 8 seeds and treaty once, so the thin verbs get pinned by hand
-//    or they get silently broken.
-// ==================================================================
 
 const REG = [
   // --- Greece & the Balkan hinterland ---
@@ -183,7 +105,9 @@ function nextPlayer(g, from) {
   for (let k = 1; k <= PLAYERS.length; k++) {
     const q = PLAYERS[(i + k) % PLAYERS.length];
     if (!g.out[q]) {
-      if (PLAYERS.indexOf(q) <= i) g.rot = (g.rot || 1) + 1; // the table has come full circle: a new round of the year
+      // TODO: vestigial fields — counts the rounds within a year, maintained here and reset at
+      // finishUpkeep, but nothing reads it.
+      if (PLAYERS.indexOf(q) <= i) g.rot = (g.rot || 1) + 1;
       return q;
     }
   }
@@ -196,12 +120,16 @@ const FLOOR = { none: 0, friend: 2, ally: 5, subject: 10 };
 const SLETTER = { none: "", friend: "F", ally: "A", subject: "S" };
 
 // The building table: every stat the engine reads lives HERE, not in scattered logic.
-//   yields     — a producer's good ("food" scales with the region's f; others by capGoods||1)
+// Absent means "no" — the engine reads fields, it never switches on building type.
+//   name       — the words the chronicle uses. NOT a display glyph; that is the table's.
+//   yields     — a producer's good. The amount is the region's farm yield when `byRegion`
+//                is set (farms alone), otherwise 1.
 //   issues     — tapping draws 1 of this good from the stockpile into the local channel
 //   unit       — { reach, sea }: may join battles at overland reach; sea-capable embarks via ports
 //   walls      — untapped, adds this to its own region's defense without joining
 //   capBonus   — adds to the Food Store of whoever commands the province it stands in
-//   trades     — "land" (range 3 overland) or "sea" (far harbours); annex — an organ of state
+//   trades     — "land" (range 3 overland) or "sea" (far harbours)
+//   annex      — an organ of state: belongs to a crown, eats 1 food, seats a government
 const BT = {
   palace: { name: "Royal palace" },
   farm: { name: "Farm", yields: "food", byRegion: true },
@@ -317,27 +245,35 @@ function foremostIn(g, rid, except) {
 // the region it stands in, whoever paid to raise it, and serves whichever power the province
 // serves. So a building is at your command if it is your own organ of state, or if it stands
 // on ground inside your writ.
+//
+// THE `bd.o` OVERLOAD, stated once here because everything downstream depends on it. That one
+// field holds two kinds of thing: a POWER LETTER for a crown building, and the REGION'S OWN ID
+// for everything else — every province work, and every wild people's warband. The test below
+// leans on it: a region id can never equal a power letter, so `bd.o === p` can never hand a
+// king command of a warband. It is load-bearing in here and it MUST NOT LEAVE — anything
+// outside the engine reading `bd.o` would be decoding a sentinel by knowing that two
+// namespaces happen not to collide. `view` converts it to a king or null.
 function usable(g, p, rid, bd) {
   if (!bd) return false;
   if (isCrown(bd)) return bd.o === p;
   return rid === HOME[p] || rank(g, p, rid) >= 3;
 }
 const readyB = (bd) => bd && !bd.tap;
-// Standing there at all. It does NOT ask whether the building has acted — a tapped port still
-// relays, which is what makes markets and ports a passive web rather than an action.
+// hasBuilding asks whether one is STANDING THERE AT ALL, not whether it has acted — a tapped
+// port still relays, which is what makes markets and ports a passive web rather than an action.
 function hasBuilding(g, rid, t) { return (g.b[rid] || []).some((bd) => bd && bd.t === t); }
 
 // ---- logistics ----
 // GOODS HAVE NO GEOGRAPHY; ACTIONS DO. The treasury is the king's abstract purse — it pays
-// anywhere and receives from anywhere (within its cap). What is geometric is what you can see:
-// action ranges, and the covering tap, which must lie within the acting building's own reach.
-// ONE range function for everything that moves over land — goods, armies, builders.
-// Passage crosses friendly (Ties+) ground; the first hop out of the actor is always free.
-// REACH — one walk for every question of "how far from here?". It crosses only ground you
-// hold at Friend+ (the origin always counts), stops at `maxd` steps, and takes ship only when
-// asked to: a coastal region with an active port reaches every coast in a single step. The two
-// flags ARE the difference between an army's road and an envoy's route — cargo and soldiers
-// walk, letters sail. Keeping them as arguments makes that a statement rather than an accident.
+// anywhere and receives from anywhere. What is geometric is what you can see: action ranges,
+// and the covering tap, which must lie within the acting building's own reach.
+//
+// REACH — one walk for every question of "how far from here?", for goods, armies and envoys
+// alike. It crosses only ground you hold at Friend+ (the origin always counts), stops at
+// `maxd` steps, and takes ship only when asked to: a coastal region with an active port
+// reaches every coast in a single step. The two flags ARE the difference between an army's
+// road and an envoy's route — cargo and soldiers walk, letters sail. Keeping them as
+// arguments makes that a statement rather than an accident.
 function reach(g, p, start, maxd, opts) {
   const bySea = !!(opts && opts.bySea), withStart = !!(opts && opts.withStart);
   const seen = { [start]: 0 }; const q = [start];
@@ -353,16 +289,13 @@ function reach(g, p, start, maxd, opts) {
   if (!withStart) out.delete(start);
   return out;
 }
-// the two long-standing callers, now spelled as what they are
+// the two named routes over that walk: overland here, diploReach (bySea) further down
 function overland(g, p, start, maxd) { return reach(g, p, start, maxd, { withStart: true }); }
 // A port carries ONE thing across the water per tap: one cargo, or one warrior.
 function portIn(g, rid) { return (g.b[rid] || []).findIndex((bd) => bd && bd.t === "port" && readyB(bd)); }
 function overseasPorts(g, exceptRid) {
   return REG.filter((r) => r.id !== exceptRid && isCoastal(r.id) && hasBuilding(g, r.id, "port")).map((r) => r.id);
 }
-// Elementary verb: SOURCE — assemble inputs at an actor, wholly from the stockpile, or by
-// TAPS FROM ONE REGION: the actor's own region or one adjacent to it (home/Subject only).
-// A single province sponsors the action; tap as many of its producers as it takes.
 // ============================ THE ACTIONS TABLE ============================
 // Every verb declares its range and its cost HERE. Ranges are per-actor; costs are specs
 // interpreted by ONE sourcing pipeline (stockpile OR one-region taps — the standard routine).
@@ -543,9 +476,9 @@ ACTIONS.remove = {
   },
 };
 // What a set of selected taps delivers. A producer gives its yield; a granary ISSUES,
-// drawing one good from the stores into the local channel. The UI computed this itself and
-// used it only to grey a button — so the rule lived outside the engine and nothing that
-// went through dispatch obeyed it. It lives here now, and availableCommands enforces it.
+// drawing one good from the stores into the local channel. This is a RULE, not a display
+// calculation: `availableCommands` reads it to decide whether the bill is covered, so an
+// interface that worked the same sum out for itself would be a second, ungated answer.
 function tapYields(g, m) {
   const out = { food: 0, bronze: 0, cloth: 0, pottery: 0 };
   for (const [rid, i] of (m.taps || [])) {
@@ -608,6 +541,10 @@ function costCaption(spec, m) {
 }
 const specOf = (m) => ACTIONS[m.kind === "build" ? "build" : m.kind].cost;
 // ===========================================================================
+// SOURCING — every cost is paid one of two ways: wholly from the stockpile, or by TAPS FROM
+// ONE REGION. The tappable regions are the actor's own and those adjacent to it, and only
+// where your writ runs (home or Subject). A single province sponsors the action; tap as many
+// of its producers as the bill takes. No mixing purse and taps in one action.
 function tapRegionsOf(g, p, actorRid) {
   return [actorRid, ...(ADJ[actorRid] || [])].filter((rid) => rid === HOME[p] || rank(g, p, rid) >= 3);
 }
@@ -644,14 +581,14 @@ function diploReach(g, p, palR, range) { return reach(g, p, palR, range, { bySea
 function yieldOf(g, rid, i) {
   const bd = g.b[rid][i];
   if (!bd || !BT[bd.t].yields) return null;
+  // TODO: vestigial fields — nothing ever writes `bd.capGoods`, so this branch is always 1.
+  // Left in place because deleting it moves the fingerprint and wants its own commit. Do not
+  // build on it: a per-building yield needs a rule, not just a field.
   return { good: BT[bd.t].yields, n: BT[bd.t].byRegion ? R[rid].f : bd.capGoods || 1 };
 }
-// THE FOOD STORE — what survives the turning of the year. Grain does not keep: the palace
-// holds 1, and every granary at your command holds 2 more. Everything above it spoils at the
-// reckoning. Bronze, cloth and pottery keep without limit, and nothing is capped during the year.
-// WHAT WINTER TAKES. Food above the store spoils at the reckoning, once the year's upkeep
-// is paid. The table used to work this out itself — a rule living in a panel, which would
-// have drifted silently the first time the reckoning changed.
+// WHAT WINTER TAKES — the food above the store that will spoil, reckoned AFTER the year's
+// upkeep is paid. A rule, not a forecast for a panel: the interface reports this number, it
+// does not compute it, or it would drift the first time the reckoning changed.
 function foodRots(g, p) {
   const have = g.players[p].stock.food;
   const due = upkeepDue(g, p).food;
@@ -659,6 +596,9 @@ function foodRots(g, p) {
   return Math.max(0, Math.min(have, have - due) - keep);
 }
 
+// THE FOOD STORE — what survives the turning of the year. Grain does not keep: the palace
+// holds 1, and every granary at your command holds 2 more. Everything above it spoils at the
+// reckoning. Bronze, cloth and pottery keep without limit, and nothing is capped during the year.
 function foodStore(g, p) {
   const palaces = works(g, (bd) => bd.t === "palace" && bd.o === p).length;
   const granaries = works(g, (bd, rid) => BT[bd.t].capBonus && usable(g, p, rid, bd));
@@ -790,10 +730,16 @@ function mapOnlyStep(g) {
   return true;                              // levy, entreat, treaty, subvert, raid, remove, trade, strikes
 }
 
-// A verb's whole specification lives in ACTIONS: its reach, its cost, and — as each one is
-// migrated — where it may land (`targets`) and what happens when it does (`commit`). While a
-// verb has not yet declared those, the chains below still answer for it. The migration is
-// therefore verb by verb, and each step is provable: behaviour must not move.
+// Where an errand may land. Every VERB answers out of ACTIONS — its reach, its cost, its
+// `targets` and its `commit` — so the chains below are not a fallback for verbs but the
+// handling for the interaction MODES that are not verbs at all: paying a bill (`source`),
+// assembling a field (`raidCommit`/`raidDef`), and sacking what was won (`raidStrike`).
+//
+// NOT THE MENU. legalTargets knows where a verb may land; it does NOT know every gate that
+// stands in front of a command. Once all have passed, the only thing on offer is the
+// reckoning, yet this function still reports every activatable slot. Anything that asks
+// "what may be done here" — the view above all — must read `availableCommands` instead, or it
+// will offer what the gate refuses. Only the suites may call this, and only to compare.
 function legalTargets(g) {
   const out = { regions: new Set(), slots: new Set() };
   if (!g.act && !g.shortfall) {
@@ -865,15 +811,10 @@ function forfeit(g, p) {
 // =====================================================================
 //                            THE ORDER
 // =====================================================================
-// A court gives an ORDER: one action-proper, fully specified. It is the pivot of the whole
-// interface, and it travels in three directions:
+// A court gives an ORDER: one action-proper, fully specified. It is how the engine states what
+// an action WAS, independently of the keystrokes that produced it:
 //
 //   commands ──Order.read──▶ ORDER ──Order.commands──▶ commands   (exact, no model)
-//
-// There was a second direction once — render the order to prose, hand the prose to a model,
-// get commands back — and that half has been removed with the rest of the LLM court. What is
-// left is the exact half, and it stands on its own: it is how the engine states what an action
-// WAS, independently of the keystrokes that produced it.
 //
 // THIS LIVES IN THE ENGINE, beside ACTIONS and describeCmd, because it is knowledge ABOUT
 // COMMANDS and must change whenever they do. Order.commands is the inverse of
@@ -922,13 +863,14 @@ function orderRead(action) {
       case "commitTaps": o.pay = "taps"; break;
       case "bid": (o.basket[c.pid] = o.basket[c.pid] || {})[c.good] = (o.basket[c.pid][c.good] || 0) + 1; break;
       case "slot":
-        // the same command, four meanings — told apart by the moment it arrives in
+        // ONE command, five meanings — told apart by the moment it arrives in, never by its
+        // own fields. Each lands in a DIFFERENT order field; none of them share one.
         if (mode === "trade") o.source = { rid: c.rid, i: c.i };
         else if (mode === "source") o.tapSlots.push([c.rid, c.i]);
         else if (mode === "remove") o.target = { rid: c.rid, i: c.i };
-        // A STRIKE IS NOT THE TARGET. The raid's target is the province; a strike names one
-        // work inside it, and there may be several. Folding them into `target` overwrote the
-        // province the raid was aimed at.
+        // A STRIKE IS NOT THE TARGET: the raid's target is the province, a strike names one
+        // work inside it, and there may be several. They need their own field or the last
+        // strike overwrites the province the raid was aimed at.
         else if (mode === "raidStrike") (o.strikes = o.strikes || []).push([c.rid, c.i]);
         else if (mode === "raidCommit" || mode === "raidDef") (o.units = o.units || []).push([c.rid, c.i]);
         break;
@@ -936,9 +878,9 @@ function orderRead(action) {
     }
   }
   // A BUILDING WITH ONE ERRAND SELECTS ITS OWN VERB, so no `verb` command appears in the
-  // trace — a stables raids, a market trades. Guessing "trade" was wrong: it silently
-  // recorded raids as trades, and an order that says the wrong verb licenses the wrong
-  // commands. Read it from the MODE instead, which is named for the verb it serves.
+  // trace — a stables raids, a market trades. Recover it from the MODE, which is named for the
+  // verb it serves. Never default to a particular verb: an order that names the wrong verb
+  // licenses the wrong commands, silently.
   if (!o.verb) {
     const r = action.find((x) => ORDER_VERB_MODES.has(x.mode));
     if (r) o.verb = r.mode;
@@ -966,21 +908,18 @@ function orderAllows(order, c, used, mode) {
     case "commitTaps":return order.pay === "taps" && (order.tapSlots || []).every(([r, i]) => u(`t:${r}:${i}`));
     case "bid":       { const want = (order.basket || {})[c.pid];
                         return !!want && !!want[c.good] && n(`b:${c.pid}:${c.good}`) < want[c.good]; }
-    case "stand":     // like `launch`: not until everything the order names is down — the
-                      // basket laid AND the units committed. Gating on the basket alone left
-                      // `stand` competing with the very commitments it waits for.
-                      return Object.entries(order.basket || {}).every(([pid, gs]) =>
+    // A TERMINAL WAITS FOR EVERYTHING THE ORDER NAMES — the basket laid AND the units
+    // committed. Gate one of them on the basket alone and it competes with the very
+    // commitments it is waiting for, so the walk can close the contest early.
+    case "stand":     return Object.entries(order.basket || {}).every(([pid, gs]) =>
                         Object.entries(gs).every(([gd, k]) => n(`b:${pid}:${gd}`) >= k))
                         && (order.units || []).every(([r, i]) => u(`u:${r}:${i}`));
-    case "endRaid":   // the sack is over when every work the order named has been struck
-                      return (order.strikes || []).every(([r, i]) => u(`k:${r}:${i}`));
-    case "launch":    // not until EVERYTHING the order names is on the field: the basket laid
-                      // AND the units committed. Gating on the basket alone left `launch`
-                      // competing with the very commitments it was waiting for.
-                      return (order.verb === "raid" || order.verb === "searaid")
+    case "launch":    return (order.verb === "raid" || order.verb === "searaid")
                         && Object.entries(order.basket || {}).every(([pid, gs]) =>
                           Object.entries(gs).every(([gd, k]) => n(`b:${pid}:${gd}`) >= k))
                         && (order.units || []).every(([r, i]) => u(`u:${r}:${i}`));
+    case "endRaid":   // the sack is over when every work the order named has been struck
+                      return (order.strikes || []).every(([r, i]) => u(`k:${r}:${i}`));
     // A `slot` MEANS DIFFERENT THINGS IN DIFFERENT MODES — buy from here, tap this, pull
     // this down, strike this, commit this. The extraction reads the mode; so must this, or
     // an order licenses a payment where a purchase was meant.
@@ -1133,8 +1072,8 @@ const Order = { read: orderRead, allows: orderAllows, mark: orderMark, commands:
 //
 // `options` and `slots` are what may be DONE here. `works`, `relations` and `subject` are what
 // IS here — one entry per slot for what is built, one per power for who stands where, and the
-// province's own standing. The interface used to read those three out of `g` directly, which
-// made `view` one of two sources rather than the only one.
+// province's own standing. All three belong in the view for the same reason the options do: an
+// interface reading them off `g` instead would be a second source of the same facts.
 //
 // The options are the IDENTICAL shape used everywhere else, so "click the map" and "click the
 // panel" are the same act, and a province out of reach is an option with `cmd: null` and a
@@ -1242,12 +1181,10 @@ function view(g) {
     options: tgts.map((c) => opt(c, R[c.rid].n, { category: "place", subject: { region: c.rid } })) });
 
   // ---- the board: the same options, indexed by place ----
-  // THE MAP DRAWS FROM THE MENU, not from a second opinion about it. It used to ask
-  // `legalTargets` directly, and `legalTargets` does not know every gate that stands in front
-  // of a command: once all had passed, the only thing on offer was the reckoning, yet the map
-  // still lit every activatable building. The click was refused and the world did not move —
-  // the gate held — but the board said a thing could be done that could not. Reading `av` is
-  // what makes that impossible rather than merely fixed.
+  // THE MAP DRAWS FROM `av`, the menu itself — never from `legalTargets`, which knows where a
+  // verb may land but not every gate in front of it (see the note there). A board drawn from
+  // the looser answer lights things the gate will refuse: no rule breaks, but the board says a
+  // thing can be done that cannot, which is the same disease one step earlier.
   //
   // The target panel above lists the same provinces. That duplication is DELIBERATE: a list
   // is easier to hit on a phone, a map easier to reason about on a desk. Both are drawn from
@@ -1289,15 +1226,9 @@ function view(g) {
       // ground `REG` describes at `slots[i]` — the engine pads g.b to slot count at initState,
       // so the two are always the same length. An empty slot is `{ building: null }`.
       //
-      // `power` IS THE OWNING KING, OR NULL. The state stores ownership in one field that
-      // holds two different kinds of thing: a power for a crown building a king holds, and
-      // the REGION'S OWN ID for everything else — a wild people's warband, and every farm,
-      // market, port, granary, garrison and workshop. That overload is load-bearing inside the
-      // engine (`usable` tests `bd.o === p`, and a region id can never equal a power letter, so
-      // no king can command a warband), but it must not cross into the interface: the table
-      // would have to decode a sentinel by knowing that region ids and power keys never
-      // collide. It reports the king or nothing, and when it reports nothing the owner is the
-      // containing province, which the caller already knows — it asked for this region.
+      // `power` IS THE OWNING KING, OR NULL — this is where the `bd.o` overload is decoded and
+      // stopped (see `usable`). Null means the owner is the containing province, which the
+      // caller already knows: it asked for this region.
       const works = (g.b[rid] || []).map((bd) => (!bd ? { building: null } : {
         building: bd.t,
         label: BT[bd.t].name,
@@ -1308,11 +1239,9 @@ function view(g) {
       // WHO STANDS HERE, DIPLOMATICALLY. Facts only: the rung is named, not abbreviated, and
       // `strained` is a flag rather than the "!" the table happens to draw.
       //
-      // Emitted for capitals too. `relLine` used to return the word "home" and nothing else
-      // for any capital, which would have hidden a rival's influence inside one. Nobody has
-      // observed that state — ~30,000 driven states produced none, and no rule obviously
-      // forbids it — so this is closing a gap rather than fixing a sighting. `subject.home`
-      // already tells the table it may say "home" instead; that is its decision, not ours.
+      // EMITTED FOR CAPITALS TOO, deliberately. A capital is not exempt from a rival holding
+      // influence inside it, and reporting only "home" there would hide that. Whether to say
+      // "home" instead is the table's call, and `subject.home` is what it decides from.
       const relations = [];
       for (const q of live(g)) {
         const rr = g.rel[q] && g.rel[q][rid];
@@ -1575,27 +1504,25 @@ function advanceChain(chain, cmd) {
 // what makes it catch a stale command — and the fingerprint is route-INDEPENDENT, which is
 // what makes it recognise that two ways round arrived at the same board.
 //
-// EVERYTHING IN THE STATE IS THE WORLD, and stays serialised with it. The fingerprint simply
-// does not look at two fields: `log`, which narrates how the world was reached, and `h`,
-// which is a digest of the same history and would make the fingerprint route-dependent.
-// The exclusion lives HERE, in one list, and nowhere else — so a field added tomorrow is
-// part of the world unless somebody deliberately says otherwise. That is the safe default:
-// an over-sensitive fingerprint is noisy and obvious, an under-sensitive one quietly reports
-// that two different boards are the same.
+// EVERYTHING IN THE STATE IS THE WORLD, and stays serialised with it. NOT_THE_WORLD is the
+// only exception, and it holds exactly the fields that record HOW the world was reached rather
+// than where the pieces stand: `log` narrates it, `chain` digests the command stream, `step`
+// counts the interaction's boundaries. Including any of the three would make the fingerprint
+// route-dependent, which is the one thing it must not be.
 //
-// The claim is checked, not asserted: test-hash.js wipes the excluded fields across
-// thousands of states and confirms the legal moves never change.
+// The exclusion lives HERE, in one list, and nowhere else — so a field added tomorrow is part
+// of the world unless somebody deliberately says otherwise. That is the safe default: an
+// over-sensitive fingerprint is noisy and obvious, an under-sensitive one quietly reports that
+// two different boards are the same. The claim is checked, not asserted —
+// harness/engine/test-hash.js wipes the excluded fields across thousands of states and confirms
+// the legal moves never change.
 //
 // ONE CAVEAT, worth knowing before relying on it. Mid-action the mode holds scratch —
 // `gifts` is an array holding a set, `taps` likewise — so two routes that have chosen the
 // same things in a different order can fingerprint differently UNTIL the action closes and
 // the scratch is cleared. Sorting them here would be wrong: other arrays in the state are
 // genuine sequences (a contest's bidding order is not a set). So the fingerprint is exact
-// at ACTION BOUNDARIES, which is where every user of it compares — round-trip equivalence,
-// plan deltas, replay checks.
-// `step` joins them for the same reason `chain` is here: it records how the interaction went,
-// not where the pieces stand. Two routes to one board must fingerprint equal even if one of
-// them crossed more step boundaries getting there.
+// at ACTION BOUNDARIES, which is where every user of it compares.
 const NOT_THE_WORLD = ["log", "chain", "step"];
 function canonical(v) {
   if (v === null || typeof v !== "object") return JSON.stringify(v) ?? "null";
@@ -1628,9 +1555,9 @@ function dispatch(g, cmd) {
     return g;
   }
   // READ THE STEP BEFORE APPLYING. applyCommand mutates in place and returns the SAME object —
-  // callers clone before they dispatch — so comparing stepKey(g) to stepKey(out) afterwards
-  // compares the new state to itself and the counter never moves. It did exactly that, and the
-  // whole harness stayed green, because a counter stuck at 0 is still a number.
+  // callers clone before they dispatch — so a stepKey(g) read taken afterwards would compare the
+  // new state to itself and the counter would never move. Nothing would catch that: a counter
+  // wedged at 0 is still a number, and every assertion about its type still passes.
   const wasStep = stepKey(g);
   const out = applyCommand(g, cmd);
   out.chain = advanceChain(g.chain, cmd);      // accepted: the world moves on
@@ -1746,6 +1673,14 @@ function applyCommand(g, cmd) {
       if (!live(g).every((q) => g.passed[q])) g.turn = nextPlayer(g, p);
       return g;
     }
+    // FORFEIT TAKES TWO WORDS, and it is the only command that does: the first arms it, the
+    // second carries it out, and any `pass` disarms it. The confirmation lives HERE rather than
+    // in a dialog for the usual reason — a guard that only exists in the interface guards
+    // nothing that comes through `dispatch`. Note that `availableCommands` offers the same
+    // `{t:"forfeit"}` either way, so a caller cannot tell the arming word from the fatal one:
+    // anything driving the game must track `confirmForfeit` itself, or send `pass` to be safe.
+    // TODO: `forfeit` cannot be told apart from its own confirmation — a real gap the moment
+    // anything but the hot seat drives this.
     case "forfeit": {
       if (g.confirmForfeit === p) { forfeit(g, p); g.confirmForfeit = null; }
       else g.confirmForfeit = p;
@@ -1765,10 +1700,10 @@ function applyCommand(g, cmd) {
   }
 }
 // ---- the command layer's interface: enumeration, description, validation ----
-// The identity of a command. It must name EVERY field that changes what the command does —
-// `good` and `pid` were missing, which meant `giftToggle food` and `giftToggle cloth` shared
-// an identity: validCmd could not tell them apart, and the world hash advanced identically
-// for both, so a stale command differing only in its good would have been accepted.
+// The identity of a command. It MUST name every field that changes what the command does. Omit
+// one and two different commands share an identity: `validCmd` cannot tell them apart, and the
+// chain advances identically for both, so a stale command differing only in that field is
+// accepted. Adding a field to a command means adding it here.
 function cmdKey(c) {
   return [c.t, c.rid ?? "", c.i ?? "", c.v ?? "", c.bt ?? "", c.side ?? "", c.good ?? "", c.pid ?? ""].join("|");
 }
@@ -1939,11 +1874,11 @@ function availableCommands(g) {
     out.push({ t: "endActivation" }, { t: "cancelActivation" });
     return out;
   }
-  // A COURT MAY ALWAYS SET DOWN WHAT IT HAS PICKED UP. Until a cost is paid nothing has
-  // been spent, so an errand can be abandoned — for another verb, or back to the choosing.
-  // This used to be gated on `!m.region`: once a target was named there was no verb switch
-  // and NO WAY OUT AT ALL. endActivation still worked, because it is UNGATED and bypasses
-  // the check — so the rule lived in whether the panel happened to draw a button.
+  // A COURT MAY ALWAYS SET DOWN WHAT IT HAS PICKED UP. Until a cost is paid nothing has been
+  // spent, so an errand can be abandoned — for another verb while no target is named, and out
+  // of the errand once one is. THERE MUST ALWAYS BE A WAY OUT here, in the menu. `endActivation`
+  // is UNGATED and would appear to serve, but a way out that only exists because a panel drew a
+  // button is not a rule — and a court that cannot retreat is stuck at the engine's own level.
   const targeting = ["build", "remove", "tax", "entreat", "treaty", "subvert", "raid", "searaid"].includes(m.v);
   if (g.act && targeting && !g.raid && !g.contest) {
     if (!m.region) {
@@ -1957,10 +1892,10 @@ function availableCommands(g) {
   if (m.v === "source") {
     if (m.phase === "choose") {
       if (stockCovers(g, p, m) && !(m.taps || []).length) out.push({ t: "srcStock" });
-      // …and only once the selection actually PAYS. Offering it after any single tap let a
-      // pottery workshop settle a bill of one food: costTakePaid then decremented a good
-      // that was never in the basket. The player never saw this — the UI greyed the button —
-      // but every caller that goes through dispatch did.
+      // …and only once the selection actually PAYS the bill. `costTakePaid` decrements the goods
+      // the spec names, so settling an uncovered bill would decrement goods that were never in
+      // the basket — a pottery workshop paying for a food. Greying the button is not enough: the
+      // gate is what every caller through `dispatch` obeys.
       if ((m.taps || []).length && costTapCovered(specOf(m), m, tapYields(g, m))) out.push({ t: "commitTaps" });
       out.push({ t: "srcBack" });
     } else if (m.kind === "trade") {
@@ -2094,6 +2029,8 @@ function nextDefender(g) {
 function resolveRaid(g) {
   const p = g.turn;
   const t = g.raid.t;
+  // TODO: vestigial fields — battleUnits never sets `deny`, so `!c.deny` filters nothing. A
+  // unit that takes the field but does not count needs a rule.
   let A = raidStrength(g), D = g.raid.defC.filter((c) => c.terms !== "hire" && !c.deny).length;
   const ft = fortressDef(g, p, t);
   if (ft) { D += ft; g.log.unshift(`The walls of ${R[t].n} stand in the defense (+${ft}, never tiring).`); }
@@ -2184,10 +2121,10 @@ function clickSlot(g, rid, i) {
   }
 }
 
-// Selecting a sponsor. There used to be a second door to this — a `tapToggle` command the
-// panel sent while the map sent `slot` — and it was UNGATED, so it could tap a warrior in
-// another power's province. Only the panel's own filtering stood in the way. One door now,
-// and `availableCommands` decides what may come through it.
+// Selecting a sponsor. ONE DOOR: a sponsor is chosen only by `slot`, so `availableCommands`
+// decides what may come through. A second spelling of the same act — a command the panel sends
+// where the map sends `slot` — arrives without that gate, and then the only thing standing
+// between a player and tapping a warrior in someone else's province is the panel's own filter.
 function toggleSourceTap(g, rid, i) {
   const m = g.mode;
   m.taps = m.taps || [];
@@ -2212,11 +2149,11 @@ function commitSourceTaps(g) {
     }
   }
   m.paid = costTakePaid(specOf(m), m, yields);
-  // WASTE IS INHERENT, and the chronicle must say so plainly. A farm's yield cannot be split,
-  // so whatever the bill did not need is simply unused — it is not banked, not refunded, and
-  // it does not stay with anyone. The old wording ("what the yield exceeded stays with the
-  // province") read as a rule about storage and misled its own author into filing two bug
-  // reports against the economy working correctly. See harness/KNOWN-ISSUES.md.
+  // WASTE IS INHERENT, and the chronicle must say so plainly. A producer's yield cannot be
+  // split, so whatever the bill did not need is simply gone — not banked, not refunded, not
+  // held by anyone. Wording that suggests the surplus is kept somewhere ("stays with the
+  // province") reads as a rule about storage, and invites bug reports against the economy
+  // working correctly.
   const spill = GOODS.filter((t) => yields[t] > 0);
   g.log.unshift(`${R[m.tapRegion].n} sponsors the ${m.kind}: ${m.paid.join(", ")}${spill.length ? "; the rest of the yield goes to waste" : ""}.`);
   finishSourcing(g);
@@ -2460,9 +2397,8 @@ function uncommitUnit(g, side, rid, i) {
   list.splice(idx, 1);
   g.log.unshift(`${PNAME[who]} stands down the unit of ${R[rid].n}${c.paidInf || c.paidGood ? " (payment refunded)" : ""}.`);
 }
-// ONE way to put a unit in the field or take it out again: the `slot` command, read by the
-// mode it arrives in. There used to be a second spelling — a `unit` command from the panel
-// while the map sent `slot` — and two spellings for one action is one too many.
+// ONE way to put a unit in the field or take it out again: the `slot` command, read by the mode
+// it arrives in. Two spellings for one action is one too many — see `toggleSourceTap`.
 function toggleUnit(g, side, rid, i, good) {
   if (isCommitted(g, side, rid, i)) { uncommitUnit(g, side, rid, i); return; }
   const who = sidePlayer(g, side);
@@ -2494,7 +2430,6 @@ function fortressDef(g, p, t) {
   (g.b[t] || []).forEach((bd) => { if (bd && BT[bd.t].walls && !usable(g, p, t, bd) && !bd.tap) d += BT[bd.t].walls; });
   return d;
 }
-// The basket buys ACCESS to a people: match-or-beat in every good, one strict excess — and the winner is joined by exactly ONE warband.
 // ============================== THE CONTEST ==============================
 // A CONTEST is the general shape behind every auction at this table: parties lay
 // baskets over lots, in sub-turns, and the basket that beats every other in every
@@ -2545,9 +2480,10 @@ function contestLay(g, lot, good, take) {
     g.log.unshift(`${PNAME[who]} lays 1 ${good} before the ${R[lot].n}.`);
   }
 }
-// the party whose basket matches-or-beats EVERY other in EVERY good, with one strict
-// excess. With two parties this is the old raid rule exactly; with five it is the same
-// sentence, and ties — the common case among many — move nothing.
+// THE BASKET BUYS ACCESS, and one sentence settles every contest: the party whose basket
+// matches-or-beats EVERY other in EVERY good, with at least one strict excess, takes the lot.
+// Two parties or five, it is the same test — and a tie, which is the common case among many,
+// moves nothing at all.
 function contestWinner(g, lot) {
   const c = g.contest; if (!c) return null;
   const book = c.lots[lot] || {};
@@ -2685,12 +2621,11 @@ function perish(g, rid, i) {
 // ==================================================================
 //  THE ENGINE'S SURFACE
 // ==================================================================
-// EXPORT NOTHING WITHOUT A CALLER. This list was 163 names, of which 109 had no consumer
-// anywhere and 13 were never called at all — the 13 are gone, and what is left below is
-// exactly what the table and the harness ask for. The list is not a menu of capabilities:
-// every rule in here is reachable through `dispatch` and describable through `view`, and an
-// export that bypasses those two is a second way to ask a question the engine already
-// answers. That is the shape of every bug this project has had.
+// EXPORT NOTHING WITHOUT A CALLER. This list is not a menu of capabilities — it is exactly
+// what the table and the harness ask for, grouped by who asks. Every rule in here is reachable
+// through `dispatch` and describable through `view`; an export that bypasses those two is a
+// second way to ask a question the engine already answers, which is the shape of every bug this
+// project has had.
 //
 // If a new consumer needs a name, add it here deliberately and say who needs it. If you are
 // adding one so the interface can decide whether something is allowed, stop: that answer

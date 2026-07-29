@@ -3,17 +3,12 @@
 // =====================================================================
 // view(g) is the ONE question the table asks. That only holds if every option it emits is a
 // command actually on offer, and if nothing the table can click was decided anywhere but
-// availableCommands. These are the standing checks that caught real bugs while `view` was
-// being built, made permanent.
+// availableCommands. This suite is what holds the view to that, in every state it can reach.
 //
-// The one the map was added for:
-//
-//   The map used to ask legalTargets directly. legalTargets does not know every gate that
-//   stands in front of a command — once all had passed, the only thing on offer was the
-//   reckoning, and yet the map still lit every activatable building. 322 such states in
-//   50,178. The click was refused and the world did not move, so no rule was broken; the
-//   BOARD LIED, which is the same disease one step earlier. Drawing the map from the menu is
-//   what makes it impossible rather than merely fixed.
+// The invariant the map section exists for: a board drawn from anything looser than the menu
+// lights things the gate will refuse. No rule breaks — the click is refused and the world does
+// not move — but the BOARD LIES, which is the same disease one step earlier. The last block in
+// this file pins the state where the two answers differ.
 // =====================================================================
 const path = require("path");
 const M = require(path.join(__dirname, "..", "new.cjs"));
@@ -72,9 +67,8 @@ for (let seed = 1; seed <= 40; seed++) {
           for (const o of place.options) eachOption(o, "map " + rid);
           for (const os of Object.values(place.slots)) for (const o of os) eachOption(o, "map " + rid + " slot");
 
-          // WHAT IS HERE, not just what may be done here. The table used to read these two out
-          // of `g` directly; now that they come through the view, this walk can hold them to
-          // their invariants in every state it reaches, which it could not do before.
+          // WHAT IS HERE, not just what may be done here. Because these come through the view
+          // rather than off `g`, this walk can hold them to their invariants in every state.
           const slotCount = (M.REG.find((r) => r.id === rid) || { slots: [] }).slots.length;
           if (!Array.isArray(place.works) || place.works.length !== slotCount)
             flag("works does not run parallel to the region's slots",
@@ -97,9 +91,9 @@ for (let seed = 1; seed <= 40; seed++) {
 
     // ---- the state-wide facts the table is allowed to know ----
     // THE STEP MUST ACTUALLY MOVE. `typeof v.step === "number"` is satisfied by a counter wedged
-    // at zero, which is what the first implementation shipped. So: never goes backwards, moves at
-    // least once across the walk, and — since a flip in `mapOnly` is by definition a new step —
-    // must have moved whenever that flips.
+    // at zero, so that assertion alone proves nothing. Three real ones: it never goes backwards,
+    // it moves at least once across the walk, and — since a flip in `mapOnly` is by definition a
+    // new step — it must have moved whenever that flips.
     if (typeof v.step !== "number") flag("view carries no step counter", { step: v.step });
     else {
       if (prevStep !== null && v.step < prevStep) flag("the step counter went backwards", { from: prevStep, to: v.step });
@@ -143,7 +137,7 @@ const rows = Object.entries(bad).sort((a, b) => b[1].count - a[1].count);
 for (const [sig, v] of rows) console.log("     ", String(v.count).padStart(6), sig, JSON.stringify(v.sample));
 ok(rows.length === 0, "every option the table can click is a command the engine offers");
 
-// ---- the state the map used to lie about ----
+// ---- the state where the menu and legalTargets disagree ----
 // All have passed: the only thing on offer is the reckoning. The board must light nothing.
 console.log("\n— the board says nothing can be done when nothing can be done —");
 {
@@ -164,7 +158,7 @@ console.log("\n— the board says nothing can be done when nothing can be done �
     for (const [i, os] of Object.entries(place.slots)) if (os.some((o) => o.cmd)) lit.push(rid + ":" + i);
   }
   ok(lit.length === 0, "and the board lights nothing", lit.join(", "));
-  // the old route, for the record: this is what the map used to read
+  // the looser answer, for contrast: this is why the map may not read it
   const legacy = M.legalTargets(g);
   console.log(`      (legalTargets still reports ${legacy.slots.size} activatable slot(s) here — which is why the map may not ask it)`);
 }

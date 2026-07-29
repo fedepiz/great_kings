@@ -59,8 +59,9 @@ console.log("\n— chronicle no longer mentions the table —");
 ok(!/upkeep table|stockpile overflow/i.test(g5.log.join(" ")), "no table language in the chronicle");
 
 console.log("\n— a sourcing must actually pay —");
-// The payment rule used to live in the UI, which greyed the button. Anything going through
-// dispatch — the scribe, the expander, a replay — could settle a food bill with pottery.
+// The payment rule must live in the gate, not in a greyed button: anything going through
+// dispatch — an order expander, a replay, an agent — would otherwise settle a food bill with
+// pottery, and `costTakePaid` would decrement a good that was never in the basket.
 {
   let g = M.initState(); g.turn = "B";
   g = M.dispatch(g, M.availableCommands(g).find((c) => c.t === "activate" && c.rid === M.HOME.B && c.b === "palace"));
@@ -87,8 +88,8 @@ console.log("\n— a sourcing must actually pay —");
 }
 
 console.log("\n— what winter takes —");
-// The spoilage rule used to live in a panel. It is a rule: food above the store rots at the
-// reckoning, once upkeep is paid.
+// Spoilage is a RULE, not a panel's forecast: food above the store rots at the reckoning, once
+// upkeep is paid. `foodRots` is the one place that says so.
 {
   let g = M.initState();
   const p = "H";

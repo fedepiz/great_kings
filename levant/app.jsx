@@ -6,23 +6,26 @@
 // =====================================================================
 
 import React, { useState, useRef } from "react";
+// THE TABLE'S WHOLE REACH INTO THE ENGINE. It was ~90 calls, then two — legalTargets for the
+// map and progressLine for the scribe — and the map's is now gone: the board draws from
+// `view` like everything else. What is left is not the rules but the WORLD (names, colours,
+// coordinates, neighbours) and the four doors: ask what the state shows (`view`), ask what a
+// model may do (`availableCommands` / `describeCmd`), send one command (`dispatch`), start
+// over (`initState`).
+//
+// Thirty-three names outlived their last caller during the `view` migration and sat here
+// importing rules nobody read. An unused import of a rule is an invitation to enforce it
+// here, which is how every UI-enforced rule in this project got in.
 import {
-  BT, FLOOR, GOODS, HOME, NB, PCOL,
-  PLAYERS, PNAME, R, REG, SLETTER, availableCommands,
-  battleUnits, biddablePeoples, view, tapYields, foodRots, contestActor, costCaption, costTapCovered, costTapDead,
-  currentDefender, defenceIdx, defenceOrder, describeCmd, dispatch, effectiveSeat,
-  endActivation, endRaid, entreatRemark, foodStore, forfeit, fortressDef,
-  infOf, initState, isCoastal, isCommitted, legalBuildTypes, legalTargets,
-  live, mapOnlyStep, myPalaces, perish, progressLine, raidStrength,
-  rank, reach, sideList, specOf, stockCovers, tapProducers,
-  tapRegionsOf, tradeSeat, unitPrice, upkeepDue, view, yieldOf,
+  BT, HOME, NB, PCOL, PNAME, R, REG, SLETTER,          // the world, as it is named and drawn
+  availableCommands, describeCmd, dispatch, effectiveSeat, initState,
+  live, mapOnlyStep, progressLine, view,
 } from "./engine.js";
 
 export default function App() {
   const [g, setG] = useState(initState);
   const upd = (fn) => setG((old) => { const n = JSON.parse(JSON.stringify(old)); fn(n); return n; });
   const p = g.turn;
-  const legal = legalTargets(g);
   const bothPassed = live(g).every((q) => g.passed[q]);
 
   const serif = { fontFamily: "Iowan Old Style, Palatino Linotype, Palatino, Georgia, serif" };
@@ -485,6 +488,15 @@ export default function App() {
     );
   };
   const bands = () => <>{BANDS.map(band)}</>;
+  // THE MAP'S PANEL. Its own band, because it is not drawn in the column — the board places
+  // it. `mapOf(rid)` is the whole of what the table knows about a province's standing and
+  // what may be done there; there is no second route.
+  const mapPanel = view(g).panels.find((pan) => pan.kind === "map") || { regions: {} };
+  const EMPTY_REGION = { options: [], slots: {}, subject: {} };
+  const mapOf = (rid) => mapPanel.regions[rid] || EMPTY_REGION;
+  // A place may host several options at once; the first that may be taken is what a click on
+  // it means. A blocked one still carries its `why`, which is what the hover says.
+  const takeable = (os) => (os || []).find((o) => o.cmd) || null;
   const fromView = (...ids) => {
     const pre = ids.filter((x) => x.endsWith(":"));
     const exact = new Set(ids.filter((x) => !x.endsWith(":")));
@@ -596,12 +608,12 @@ export default function App() {
           ))}
 
           {REG.map((r) => {
-            const hotR = legal.regions.has(r.id);
-            const isActPal = g.act && g.act.palace === r.id;
+            // everything the board knows about this province comes from here
+            const place = mapOf(r.id);
+            const { home, holder: subj, ally: allyOf, coastal, acting: isActPal } = place.subject;
+            const pick = takeable(place.options);
+            const hotR = !!pick;
             const w = regW(r);
-            const home = PLAYERS.find((q) => HOME[q] === r.id) || null;
-            const subj = home || PLAYERS.find((q) => !g.out[q] && rank(g, q, r.id) >= 3) || null;
-            const allyOf = !subj ? PLAYERS.find((q) => !g.out[q] && rank(g, q, r.id) === 2) || null : null;
             return (
               <g key={r.id}>
                 <rect x={r.x} y={r.y} width={w} height={regH} rx={r.wild ? 2 : 9}
@@ -610,9 +622,12 @@ export default function App() {
                   strokeWidth={hotR ? 3 : isActPal ? 2.5 : subj ? 2 : 1.4}
                   strokeDasharray={allyOf && !subj ? "6 3" : r.wild ? "2 3" : undefined}
                   style={{ cursor: hotR ? "pointer" : "default" }}
-                  onClick={noDrag(() => hotR && go({ t: "region", rid: r.id }))}
-                />
-                {isCoastal(r.id) && (
+                  onClick={noDrag(() => pick && go(pick.cmd))}
+                >
+                  {/* a province out of reach still says why, on hover, as a blocked button does */}
+                  {(place.options[0] || {}).why && <title>{place.options[0].why}</title>}
+                </rect>
+                {coastal && (
                   <rect x={r.x + w - 11} y={r.y + regH - 11} width="7" height="7" rx="1.5"
                     fill="#3E5F82" stroke="#22384D" strokeWidth="0.8" style={{ pointerEvents: "none" }} />
                 )}
@@ -623,9 +638,12 @@ export default function App() {
                   const bd = g.b[r.id][i];
                   const sx = r.x + PADX + i * (SLOT + GAP);
                   const sy = r.y + HEAD;
-                  const hotS = legal.slots.has(r.id + ":" + i);
+                  // whether this slot may be clicked, and what the click MEANS — opening a
+                  // building or picking one inside an activation — is the engine's to say.
+                  const sPick = takeable(place.slots[i]);
+                  const hotS = !!sPick;
                   return (
-                    <g key={i} style={{ cursor: hotS ? "pointer" : "default" }} onClick={noDrag(() => hotS && go(g.act ? { t: "slot", rid: r.id, i } : { t: "activate", rid: r.id, i }))}>
+                    <g key={i} style={{ cursor: hotS ? "pointer" : "default" }} onClick={noDrag(() => sPick && go(sPick.cmd))}>
                       {r.wild ? (
                         <circle cx={sx + SLOT / 2} cy={sy + SLOT / 2} r={SLOT / 2 - 1}
                           fill="#D6C39A" stroke={hotS ? "#7A3B0E" : "#6E5C3A"} strokeWidth={hotS ? 2.5 : 1}

@@ -30,7 +30,27 @@ The lesson worth keeping: **the schema was complete all along.** All three fault
 what the engine *read out of* a trace or *permitted* from an order — not in what an order can
 express.
 
-## 2. The payment rule is enforced by the UI, not by the engine  *(open, engine)*
+## 2. ~~The payment rule is enforced by the UI, not by the engine~~  *(CLOSED — the fix landed; this entry was stale)*
+
+The one-line fix described below is **in the engine**, at the `commitTaps` push in
+`availableCommands`:
+
+```js
+if ((m.taps || []).length && costTapCovered(specOf(m), m, tapYields(g, m))) out.push({ t: "commitTaps" });
+```
+
+Measured over the same 40-seed walk that found the original: **50,178 states, `commitTaps`
+offered 1,628 times, zero of them with the bill uncovered, and no stock ever went negative.**
+`app.jsx` no longer calls `costTapCovered` at all — it no longer calls anything of the kind,
+since the table draws from `view`.
+
+What is left of this entry is the account of the rule and the two misreadings, which are worth
+keeping. Note that **issue 3 below depends on this one**: it was already written as though the
+fix had landed, which is the tell that this entry outlived its own resolution.
+
+---
+
+### the original entry, for the record
 
 **The rule.** An action must be paid, from the treasury or by tapping producers. Tapping
 delivers the FULL value of what is tapped, and what that buys depends on the verb: an embassy
@@ -55,6 +75,7 @@ sponsors the build: food"* — `costTakePaid` decrements a good that was never t
 **The fix is one line in the right place**: gate the menu entry on `costTapCovered`, and the
 UI's disabled state becomes a display of the rule rather than the rule itself. This is
 exactly what the house style warns about — a precondition living outside `availableCommands`.
+*(Done — see the head of this entry.)*
 
 **Two things I got wrong**, recorded because the mistakes are instructive:
 - *"A granary yields nothing and still pays."* A granary is not a producer. `tapProducers`
@@ -95,3 +116,27 @@ approves a command by matching the key against the menu, and a command whose *me
 depends on the mode — `{"t":"region","rid":"NIP"}` under `build` versus `entreat` — passes
 either way. The world chain catches this when a stamp is present; an unstamped caller is
 still unprotected. Replays and tests dispatch unstamped by design.
+
+---
+
+## 5. ~~The map disagreed with the menu about what could be done~~  *(CLOSED — structural)*
+
+The map read `legalTargets` directly; the panels read `availableCommands`. Two answers to one
+question, and `legalTargets` does not know every gate that stands in front of a command. Once
+all powers had passed, the menu was exactly `[{t:"resolveUpkeep"}]` and the board still lit
+every activatable building. **322 states in 50,178.**
+
+No rule was broken. The click was refused — *"That is not on offer now: activate HAT"* — and
+the fingerprint did not move. This is the distinction worth holding onto: issue 2 was a rule
+living in the interface, where a caller bypassing the UI could break it. This was the
+interface holding a **second opinion about the rules**, where the gate still protects the
+engine and only the player is misled. Different severity, same cause, and the same fix:
+one source of truth.
+
+The map now draws from the same `availableCommands` walk the panels do, so the disagreement is
+not patched but impossible. `test-view.js` asserts it over every state it can reach, and was
+confirmed to fail when the map is pointed back at `legalTargets`.
+
+`legalTargets` itself is unchanged and still correct for what it is — the geometry of reach,
+which `availableCommands` composes with everything else. It is simply not a menu, and nothing
+should treat it as one.

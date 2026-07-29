@@ -17,10 +17,21 @@ else
 fi
 echo "— engine suites —"
 cd harness/engine
-for f in economy ownership war raid subvert verbs commands hash orders; do
+for f in economy ownership war raid subvert verbs commands hash orders view; do
   printf "  %-10s " $f; node test-$f.js 2>&1 | grep "passed," | tail -1
 done
 cd ../..
+# THE SOURCES MUST COMPILE ON THEIR OWN. build-game.js strips the imports before it
+# concatenates, so a fault in the import block never reaches the built file and every check
+# downstream passes. app.jsx imported `view` TWICE and nothing noticed: the artifact was
+# fine, the source was not valid JavaScript, and the next person to open it in a bundler or
+# an editor would have met an error the whole harness said did not exist.
+echo "— the SOURCES compile on their own —"
+for f in levant/engine.js levant/app.jsx; do
+  if npx esbuild "$f" --bundle --outfile=/dev/null --external:react --external:react-dom/server >/dev/null 2>/tmp/srcerr
+    then echo "  $f: compiles"
+    else echo "  $f: BROKEN"; sed 's/^/    /' /tmp/srcerr; exit 1; fi
+done
 echo "— the PUBLISHED artifacts compile and render —"
 for f in /mnt/user-data/outputs/levant-prototype-v25-core.jsx /mnt/user-data/outputs/orders-bench.jsx; do
   [ -f "$f" ] || continue

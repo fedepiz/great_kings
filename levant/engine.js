@@ -1127,6 +1127,24 @@ const Order = { read: orderRead, allows: orderAllows, mark: orderMark, commands:
 //   { kind: "choices", id, label, options[] }            options: { label, gloss, cmd, weight }
 //   { kind: "facts",   id, label, rows[] }               rows:    { label, value, warn }
 //   { kind: "sides",   id, label, columns[] }            a contest: opposed totals
+//   { kind: "map",     id, regions{} }                   the same options, indexed by PLACE
+//
+// THE MAP is the sixth kind, and the only one that is not a list. A panel is read top to
+// bottom; a province is drawn ONCE and may host several options at once — build here, entreat
+// here, levy here — so the map cannot consume a flat list of choices. It gets the same facts
+// keyed by region:
+//
+//   regions: { NIP: { options[], slots: { 0: options[] }, subject: {…} }, … }
+//
+// The options are the IDENTICAL shape used everywhere else, so "click the map" and "click the
+// panel" are the same act, and a province out of reach is an option with `cmd: null` and a
+// `why`, exactly as a blocked sponsor is.
+//
+// `subject` carries FACTS, never appearance: who holds the province, at what rung, whether it
+// is coastal. `PCOL[holder]` is the table's reading of that, and belongs to the table. What
+// the map does NOT carry is where a province sits: `REG` holds x/y because that is a fact
+// about the world, like which regions border it. The table owns the transform — pan, zoom,
+// pixels, colour — and nothing else.
 //
 // `cmd` on an option is the command to dispatch, verbatim. The table never builds one.
 // =====================================================================
@@ -1222,6 +1240,59 @@ function view(g) {
   const tgts = only("region");
   if (tgts.length) panels.push({ kind: "choices", band: "detail", id: "target", pick: "one", label: "",
     options: tgts.map((c) => opt(c, R[c.rid].n, { category: "place", subject: { region: c.rid } })) });
+
+  // ---- the board: the same options, indexed by place ----
+  // THE MAP DRAWS FROM THE MENU, not from a second opinion about it. It used to ask
+  // `legalTargets` directly, and `legalTargets` does not know every gate that stands in front
+  // of a command: once all had passed, the only thing on offer was the reckoning, yet the map
+  // still lit every activatable building. The click was refused and the world did not move —
+  // the gate held — but the board said a thing could be done that could not. Reading `av` is
+  // what makes that impossible rather than merely fixed.
+  //
+  // The target panel above lists the same provinces. That duplication is DELIBERATE: a list
+  // is easier to hit on a phone, a map easier to reason about on a desk. Both are drawn from
+  // this one menu, so they cannot come to disagree.
+  {
+    const regions = {};
+    // which slots may be clicked, and with which command — `activate` opens a building,
+    // `slot` picks one inside an activation. The engine decides which; the map only asks.
+    const slotCmds = av.filter((c) => c.t === "activate" || c.t === "slot");
+    const tgtBy = new Map(tgts.map((c) => [c.rid, c]));
+    for (const r of REG) {
+      const rid = r.id;
+      const options = [];
+      if (tgtBy.has(rid))
+        options.push(opt(tgtBy.get(rid), R[rid].n, { category: "place", subject: { region: rid } }));
+      // A PROVINCE OUT OF REACH IS AN OPTION, NOT AN ABSENCE. Only while an errand is looking
+      // for ground: with nothing to target there is nothing a province could be refused for,
+      // and every region would carry a reason answering a question nobody asked.
+      else if (tgts.length)
+        options.push(blocked(R[rid].n, rejectReason(g, { t: "region", rid }, av),
+          { category: "place", subject: { region: rid } }));
+
+      const slots = {};
+      for (const c of slotCmds) {
+        if (c.rid !== rid) continue;
+        (slots[c.i] = slots[c.i] || []).push(
+          opt(c, R[rid].n, { category: "work", subject: { region: rid, slot: c.i } }));
+      }
+
+      // WHOSE WRIT RUNS HERE. A home province is held by its king outright; otherwise the
+      // highest rung takes it, and an ally shows only where nobody holds it. These are the
+      // facts. That a subject province is drawn in its holder's colour, and an ally's in a
+      // dashed line, is the table's reading of them.
+      const home = PLAYERS.find((q) => HOME[q] === rid) || null;
+      const holder = home || live(g).find((q) => rank(g, q, rid) >= 3) || null;
+      const ally = holder ? null : live(g).find((q) => rank(g, q, rid) === 2) || null;
+      regions[rid] = { options, slots, subject: {
+        region: rid, home, holder, ally,
+        rank: holder ? rank(g, holder, rid) : 0,
+        coastal: isCoastal(rid), wild: !!r.wild,
+        acting: !!(g.act && g.act.palace === rid),
+      } };
+    }
+    panels.push({ kind: "map", band: "map", id: "map", regions });
+  }
 
   // ---- what to raise, once the ground is chosen ----
   const bts = only("buildType");
@@ -1617,8 +1688,11 @@ function validCmd(g, cmd) {
   if (["srcStockUnit", "giftToggle"].includes(cmd.t)) return avail.some((c) => c.t === cmd.t);
   return avail.some((c) => cmdKey(c) === cmdKey(cmd));
 }
-function rejectReason(g, cmd) {
-  const avail = availableCommands(g);
+// `av` is the menu this refusal is judged against. It defaults to the live one; a caller
+// that has already walked the menu — `view`, writing a `why` onto every province out of
+// reach — passes its own rather than walking it again per region.
+function rejectReason(g, cmd, av) {
+  const avail = av || availableCommands(g);
   const types = [...new Set(avail.map((c) => c.t))];
   if (cmd.t === "buildType" && g.mode && g.mode.region) {
     const legal = legalBuildTypes(g);

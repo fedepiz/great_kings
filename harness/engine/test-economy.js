@@ -1,0 +1,107 @@
+const M = require("../new.cjs");
+let pass = 0, fail = 0;
+const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };
+const clone = (g) => JSON.parse(JSON.stringify(g));
+
+console.log("\n— state shape —");
+let g = M.initState();
+ok(!("pendingOverflow" in g), "no pendingOverflow in state");
+ok(M.PLAYERS.every((p) => !("committed" in g.players[p])), "no committed pool on any player");
+
+console.log("\n— the Food Store —");
+ok(M.foodStore(g, "M") === 1, `palace alone carries 1 food (got ${M.foodStore(g, "M")})`);
+// plant a granary in a home region and check it adds 2
+let g2 = clone(g);
+const home = M.HOME.M;
+const slot = g2.b[home].findIndex((s) => s === null);
+g2.b[home][slot] = { t: "granary", o: "M", tap: false };
+ok(M.foodStore(g2, "M") === 3, `palace + one granary carries 3 (got ${M.foodStore(g2, "M")})`);
+
+console.log("\n— the reckoning: grain rots, metal keeps —");
+let g3 = clone(g);
+g3.players.M.stock = { food: 9, bronze: 7, cloth: 5, pottery: 4 };
+for (const q of M.PLAYERS) g3.passed[q] = true;
+g3 = M.dispatch(g3, { t: "resolveUpkeep" });
+let guard = 0;
+while (g3.shortfall && guard++ < 40) {
+  const c = M.availableCommands(g3).find((x) => x.t === "perish");
+  if (!c) break;
+  g3 = M.dispatch(g3, c);
+}
+const due = 1; // palace only at game start
+ok(g3.players.M.stock.food === M.foodStore(g3, "M"),
+   `food falls to the Food Store after upkeep (${g3.players.M.stock.food} vs store ${M.foodStore(g3, "M")})`);
+ok(g3.players.M.stock.bronze === 7 && g3.players.M.stock.cloth === 5 && g3.players.M.stock.pottery === 4,
+   "bronze, cloth and pottery survive the year untouched");
+
+console.log("\n— nothing is turned away during the year —");
+let g4 = clone(g);
+const before = g4.players.B.stock.pottery;
+g4.players.B.stock = { food: 20, bronze: 20, cloth: 20, pottery: 20 };
+g4.players.B.stock.pottery += 5;
+ok(g4.players.B.stock.pottery === 25, "stores accept gains with no cap during the year");
+
+console.log("\n— no overflow commands survive anywhere —");
+let g5 = M.initState();
+let seen = new Set(), s = 7 >>> 0;
+const rnd = () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
+for (let i = 0; i < 6000; i++) {
+  const menu = M.availableCommands(g5).filter((c) => c.t !== "forfeit");
+  if (!menu.length) break;
+  for (const c of menu) seen.add(c.t);
+  g5 = M.dispatch(clone(g5), menu[Math.floor(rnd() * menu.length)]);
+  if (g5.round > 15) break;
+}
+ok(!seen.has("overflowTable") && !seen.has("overflowSwap") && !seen.has("overflowAllTable") && !seen.has("commitToTable"),
+   `no table commands ever offered (${seen.size} distinct commands seen)`);
+
+console.log("\n— chronicle no longer mentions the table —");
+ok(!/upkeep table|stockpile overflow/i.test(g5.log.join(" ")), "no table language in the chronicle");
+
+console.log("\n— a sourcing must actually pay —");
+// The payment rule used to live in the UI, which greyed the button. Anything going through
+// dispatch — the scribe, the expander, a replay — could settle a food bill with pottery.
+{
+  let g = M.initState(); g.turn = "B";
+  g = M.dispatch(g, M.availableCommands(g).find((c) => c.t === "activate" && c.rid === M.HOME.B && c.b === "palace"));
+  g = M.dispatch(g, { t: "verb", v: "build" });
+  g = M.dispatch(g, M.availableCommands(g).find((c) => c.t === "region"));
+  g = M.dispatch(g, M.availableCommands(g).find((c) => c.t === "buildType"));
+  const slots = M.availableCommands(g).filter((c) => c.t === "slot");
+  let checked = 0, wrong = 0;
+  for (const s of slots) {
+    const one = M.dispatch(clone(g), s);
+    const offered = M.availableCommands(one).some((c) => c.t === "commitTaps");
+    const pays = M.costTapCovered(M.specOf(one.mode), one.mode, M.tapYields(one, one.mode));
+    checked++; if (offered !== pays) wrong++;
+  }
+  ok(checked > 2 && wrong === 0, `commitTaps is offered exactly when the taps pay (${checked} selections)`);
+  const potter = slots.find((s) => { const y = M.yieldOf(g, s.rid, s.i); return y && y.good !== "food"; });
+  if (potter) {
+    const one = M.dispatch(clone(g), potter);
+    ok(!M.availableCommands(one).some((c) => c.t === "commitTaps"),
+       "a producer of the wrong good cannot settle a fixed bill");
+    const forced = M.dispatch(clone(one), { t: "commitTaps" });
+    ok(M.fingerprint(forced) === M.fingerprint(one), "and dispatching it anyway is refused");
+  } else console.log("   – no wrong-good producer in reach; skipped");
+}
+
+console.log("\n— what winter takes —");
+// The spoilage rule used to live in a panel. It is a rule: food above the store rots at the
+// reckoning, once upkeep is paid.
+{
+  let g = M.initState();
+  const p = "H";
+  g.players[p].stock.food = 0;
+  ok(M.foodRots(g, p) === 0, "nothing rots when there is nothing");
+  const keep = M.foodStore(g, p), due = M.upkeepDue(g, p).food;
+  g.players[p].stock.food = due + keep;
+  ok(M.foodRots(g, p) === 0, `upkeep plus the store keeps (${due}+${keep}) — nothing rots`);
+  g.players[p].stock.food = due + keep + 3;
+  ok(M.foodRots(g, p) === 3, "three above that, and three rot");
+  g.players[p].stock.food = Math.max(0, due - 1);
+  ok(M.foodRots(g, p) === 0, "a court that is short loses nothing to winter — it loses mouths");
+}
+
+console.log(`\n${pass} passed, ${fail} failed\n`);
+process.exit(fail ? 1 : 0);

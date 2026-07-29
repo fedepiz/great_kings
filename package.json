@@ -1,0 +1,11 @@
+{
+  "name": "great-kings",
+  "private": true,
+  "description": "The Great Kings — a Late Bronze Age strategy game, with an LLM court alongside it",
+  "scripts": {
+    "build": "node build-game.js",
+    "test": "./harness/run-all.sh",
+    "bench": "./harness/rebuild-bench.sh && ./harness/inject.sh"
+  },
+  "devDependencies": { "esbuild": "^0.21.0", "react": "^18.3.1", "react-dom": "^18.3.1" }
+}

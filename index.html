@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <title>The Great Kings</title>
+    <style>
+      /* The board fills the window and owns its own scrolling; the page itself never scrolls. */
+      html, body, #root { height: 100%; margin: 0; background: #e5d9b8; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- Both files are build outputs of levant/main.jsx and are gitignored. `npm run dev`
+         serves them from memory; `npm run build` writes them beside the sources. The CSS is
+         emitted because main.jsx imports levant/table.css. -->
+    <link rel="stylesheet" href="/levant/main.css" />
+    <script type="module" src="/levant/main.js"></script>
+  </body>
+</html>

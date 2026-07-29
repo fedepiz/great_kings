@@ -1,66 +1,56 @@
 # THE GREAT KINGS
 
 A Late Bronze Age strategy game — five great powers, a board of provinces that are themselves
-polities, and a diplomacy of gifts, treaties, raids and subversions. Hot-seat, with an
-LLM-driven court being built alongside it.
+polities, and a diplomacy of gifts, treaties, raids and subversions. Hot-seat.
 
-Everything here is plain JavaScript and JSX. No framework beyond React, no bundler config, no
-package manager state that matters. `npx esbuild` is used for building and for the tests.
+Everything here is plain JavaScript and JSX. No framework beyond React, no bundler config
+beyond two `esbuild` command lines, and no package manager state that matters.
 
 ---
 
-## The two things you can run
+## Running it
 
-Both are **single self-contained files**, built from source, meant to be opened as artifacts:
+```bash
+npm install
+npm run dev      # esbuild dev server on :5173 — open http://127.0.0.1:5173/
+npm run build    # writes levant/main.js + levant/main.css beside the sources
+npm test         # the harness: differential, ten suites, sources compile, table renders
+```
 
-| `levant-prototype-v25.jsx` | the game — board, panels, and the scribe's desk |
-| `orders-bench.jsx` (built to `/mnt/user-data/outputs/`) | the evaluation bench |
-
-**Neither is edited by hand.** Both are build outputs and are overwritten. Edit the sources.
+`npm run dev` keeps serving as long as its stdin is open — that is how esbuild's serve mode
+behaves, so run it in a terminal you leave open rather than detached.
 
 ---
 
 ## Source layout
 
 ```
+index.html         the page; loads levant/main.js
 levant/
-  engine.js        THE RULES. No React, no JSX, no DOM. ~2,200 lines, 160 exports.
-  app.jsx          THE TABLE. Interface and the scribe desk. ~770 lines.
-
-build-game.js      engine.js + app.jsx  →  levant-prototype-v25.jsx
+  engine.js        THE RULES. No React, no JSX, no DOM. ~2,600 lines, 30 exports.
+  app.jsx          THE TABLE. The hot-seat interface. ~510 lines.
+  main.jsx         the only file that knows a DOM exists: mounts App.
+  table.css        the ~30 utility classes app.jsx's layout depends on.
 
 harness/
-  run-all.sh       everything: build, differential, ten suites, both sources, both renders
-  rebuild-bench.sh corpus pipeline end to end
-  inject.sh        build the orders-bench artifact
-
+  run-all.sh       everything, in one command
+  render-check.jsx does the table draw, at both sizes?
   engine/          "does the game still work?"
-    test-*.js      ten suites, ~115 assertions
+    test-*.js      ten suites, 111 assertions
     test-view.js   "does the table have a second opinion?" — every option the table can
                    click is a command the engine offers, over 50k states
+    test-orders.js every action the engine can play, an order can describe — 1052/1052
     drive.js       plays a seeded game, prints a fingerprint
     diff.sh        replays 10 seeds against ref.cjs — a pure refactor must be identical
     check.sh       bundle + differential, quickly
 
-  bench/           "does an instruction get carried out?"
-    gen-corpus.js      walks the engine, extracts orders, renders prose → orders-corpus.json
-    render-pack.js     corpus → orders-pack.json (pre-rendered prompts)
-    validate-corpus.js the corpus replays against the engine, exactly
-    validate-pack.js   oracle 100% / always-wrong 0% / random ≈ baseline
-    test-roundtrip.js  the corpus round-trips through Order
-    check-chain.js     every stage is newer than the one it is built from
-    build-bench.js     engine + generator + UI → orders-bench.jsx
-    orders-bench.jsx   the bench's own source (the UI half)
-
-  SCRIBE-FINDINGS.md   what the evaluation established
-  KNOWN-ISSUES.md      what is wrong, and what was wrong and is now understood
+  KNOWN-ISSUES.md  what is wrong, and what was wrong and is now understood
 
 great-kings-player-rules.md   the rulebook, current with the engine
-smoke*.jsx                    render checks used by run-all.sh
 ```
 
-Generated and not worth keeping: `harness/new.cjs` (the engine bundle the tests import),
-`harness/ref.cjs` (the differential reference), `*.bak*`.
+Generated and gitignored: `levant/main.js`, `levant/main.css`, `harness/new.cjs` (the engine
+bundle the tests import), `harness/ref.cjs` (the differential's baseline).
 
 ---
 
@@ -78,11 +68,15 @@ command in any state is either applied or refused with a chronicle line — neve
 > (which vanished once a target was named). **If a precondition is not in
 > `availableCommands`, it is not a rule.**
 
+The engine exports **30 names**, and that number is load-bearing. It was 163, of which 109 had
+no consumer anywhere and 13 were never called at all. An export that lets a caller ask "is this
+allowed?" some other way is a second answer to a question `availableCommands` already answers,
+and that is the shape of every bug above. See the block at the foot of `engine.js`.
+
 **2. `Order` — the pivot between commands and intent.**
 
 ```
 commands ──Order.read──▶ ORDER ──Order.commands──▶ commands   (exact, no model)
-                           └───────render────────▶ prose ──scribe──▶ commands  (model)
 ```
 
 An ORDER is one action-proper, fully specified: actor, verb, target, source, buildType,
@@ -105,7 +99,9 @@ the table asks "what do I show?"   → view(g)
 
 The table does **no reasoning**. It does not check whether a payment suffices, count what is
 left, or know that commands have types. It reads panels and draws them, and ships back the
-command attached to whatever was clicked.
+command attached to whatever was clicked. Its whole reach into the engine is `view`, `dispatch`,
+`initState`, plus `live` and `mapOnlyStep` — and neither of those last two decides what may be
+done.
 
 `view` returns panels in a **fixed skeleton of bands**, each absent only when empty, so
 nothing moves under the hand:
@@ -134,10 +130,6 @@ The table owns the transform — pan, zoom, pixels, colour — and nothing else.
 > said**. The map now reads the same `availableCommands` walk the panels read, so they cannot
 > drift. If two things answer "what may be done here", one of them is wrong eventually.
 
-The table's remaining reach into the engine is **one call**: `progressLine`, for the scribe's
-prompt. `check-chain.js` asserts `app.jsx` builds no command, branches on no command type,
-and calls neither `legalTargets` nor `rank` nor `isCoastal`.
-
 **4. Two digests, two questions.**
 
 | `g.chain` | hashes the **command stream** | *same trajectory?* |
@@ -152,63 +144,47 @@ two routes to the same board compare equal; it is exact at action boundaries.
 
 ## Working on it
 
-```bash
-./harness/run-all.sh          # build, differential, nine suites, both renders
-./harness/rebuild-bench.sh    # corpus → pack, with every check
-./harness/inject.sh           # build the orders-bench artifact
-```
-
 **After any engine change:**
 
 1. edit `levant/engine.js` (and `levant/app.jsx` if the table must change)
-2. `./harness/run-all.sh` — everything must pass
+2. `npm test` — everything must pass
 3. if the **differential** reports differences, decide whether they are intended. Prove the
    change is what you think — e.g. that the menu only ever *gains* commands — then
    `cp harness/new.cjs harness/ref.cjs` to accept the new baseline
-4. `./harness/rebuild-bench.sh` if the corpus should follow
 
 **The differential is the safety net for refactors.** Ten seeded games must play identically
 unless the change is meant to alter play.
 
-**Three failures have reached the browser**, each because a test passed on something that was
-not the artifact. All three are now guarded, and the guards are worth keeping:
+**Every UI change in this project that looked cosmetic turned out to be hiding a rule.** The
+question to ask of a drawing that does something the panels do not is not *"how do I draw
+this"* but **"where is this drawing getting its answer, and is it the same place the menu gets
+its answer?"**
 
-- a **stale bundle** — the build error went to `/dev/null` and `node` ran the previous
-  output. `run-all.sh` now deletes the temp files first and never hides the build.
-- a **duplicate declaration** from concatenating two sources — caught by compiling the built
-  file, which is what the smoke render does.
-- a **stray import** surviving the assembly — `build-game.js` refuses to write.
+**And check that your checks can fail.** Two of this project's tests could not. `test-orders.js`
+— the command layer's regression test — ended in `process.exit(fail ? 0 : 0)`, so both branches
+returned success. And the render smoke test had been failing for an unknown length of time,
+asserting on a string the interface does not render, behind a `node smoke.cjs | head -1` that
+truncated the message away *and* discarded the exit code, because a bash pipeline reports its
+last command's status and `pipefail` was not set. `run-all.sh` reported a pass on a failing test.
 
-A fourth was found the other way round: **the source was broken and the artifact was fine.**
-`app.jsx` imported `view` twice — not valid JavaScript — and nothing noticed, because
-`build-game.js` strips the import block before it concatenates. Every check downstream ran on
-the built file and passed. `run-all.sh` now compiles **both sources on their own** as well.
-The general form: *a guard that only ever looks at the build output cannot see a fault in
-what the build throws away.*
-
-And: **do not publish `levant/app.jsx` or `levant/engine.js` as artifacts.** They are sources
-and import each other; only the built files run.
+Both are fixed, and both fixes were then confirmed by deliberately breaking an assertion and
+watching the harness go red. That last step is the point: **a guard you have never seen fail is
+not a guard, it is a decoration.** Every check here was written in response to something that
+actually broke, which makes it easy to forget that the check itself needs proving.
 
 ---
 
-## Where the AI work stands
+## What is not here
 
-The **scribe** — prose instruction → commands — is measured and understood.
-See `harness/SCRIBE-FINDINGS.md`. The headline:
+The game has **no victory condition** (§12 of the rulebook), so "good play" is undefined.
 
-| whole-activation directive | 72.5% per step |
-| + a step marker | 85% |
-| **one directive per action** | **97.5%** |
-| contests, per-seat directives | 100% |
+An LLM court was prototyped alongside the game and has been removed: a **scribe** (prose
+instruction → commands) and an evaluation bench that measured it. Both were built for a sandbox
+that no longer exists — the transport called `api.anthropic.com` with no credentials, through a
+gateway that supplied them — and the bench's committed corpus was 1.3 MB of generated JSON.
+`Order` stays in the engine, because the commands-to-intent pivot is the engine's own and
+`test-orders.js` is its regression test; everything model-facing is in git history.
 
-Per-step accuracy compounds, so a whole-plan directive essentially never completes a turn.
-**The interface must re-issue a directive at each action boundary.** The other finding that
-matters: **a directive must be as specific as the decision it governs** — seven corpus
-defects, every one an instruction that did not say enough, and every one making a competent
-model look broken.
-
-The **vizier** — board → plan — is designed but not built. The design is in the thread, and
-the essentials: the game has **no victory condition** (§12), so "good play" is undefined and
-the honest question is *what is the marginal value of a planner over arithmetic*; four of the
-five stated GOALS are computable; a **heuristic planner should be a rival candidate**, not
-merely a calibration floor.
+The one measurement finding worth carrying into whatever comes next: **a directive must be as
+specific as the decision it governs.** Every ambiguity left in an instruction became an error
+that got blamed on the model.

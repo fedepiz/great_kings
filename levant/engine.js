@@ -2,22 +2,16 @@
 //  THE GREAT KINGS — THE ENGINE
 // =====================================================================
 //  No React, no JSX, no DOM. Everything here is the game: the rules, the command layer,
-//  the chain and the fingerprint, and the Order namespace. It is imported by the UI
-//  (levant/app.jsx), by the harness tests, and by the orders bench — all of which get the
-//  SAME FILE rather than a slice of one.
+//  the chain and the fingerprint, and the Order namespace. The table (levant/app.jsx) and the
+//  harness suites both import THIS FILE — there is one core and no copy of it anywhere.
 //
-//  The published artifacts are assembled from this and app.jsx by build-game.js and
-//  harness/bench/build-bench.js. Edit here, never in a built file.
+//  Every region is a polity. Relations ladder (Friend 2 / Ally 5 / Subject 10) on per-region
+//  influence. Actor's-region availability; markets and ports as passive relay; diplomatic
+//  reach as a web. Dispositions are stubbed — everyone behaves "Soft". Hot-seat only.
+//
+//  The engine's export list is at the foot of this file, and it is deliberately short.
+//  Read it before adding to it.
 // =====================================================================
-
-
-// ------------------------------------------------------------------
-// THE GREAT KINGS — Levant table v0.3 (hot-seat)
-// Every region is a polity. Relations ladder (Friend 2 / Ally 5 /
-// Subject 10) on per-region influence. Actor's-region availability;
-// markets/ports as passive relay; diplomatic reach as a web.
-// Dispositions stubbed: everyone behaves "Soft". Hot-seat only: no AI courts.
-// ------------------------------------------------------------------
 //
 // ==================================================================
 //                      HOUSE STYLE — READ BEFORE EDITING
@@ -196,7 +190,6 @@ function nextPlayer(g, from) {
   return from;
 }
 function others(g, p) { return live(g).filter((q) => q !== p); }
-const TRADE = ["bronze", "cloth", "pottery"];
 const GOODS = ["food", "bronze", "cloth", "pottery"];
 const RANK = { none: 0, friend: 1, ally: 2, subject: 3 };
 const FLOOR = { none: 0, friend: 2, ally: 5, subject: 10 };
@@ -328,7 +321,6 @@ function usable(g, p, rid, bd) {
   if (isCrown(bd)) return bd.o === p;
   return rid === HOME[p] || rank(g, p, rid) >= 3;
 }
-const activeB = (bd) => bd && !bd.pill;
 const readyB = (bd) => bd && !bd.pill && !bd.tap;
 function hasActive(g, rid, t) { return (g.b[rid] || []).some((bd) => bd && bd.t === t && !bd.pill); }
 
@@ -633,10 +625,6 @@ function producersOf(g, p, actorRid, good) {
     for (const [r2, i, y] of tapProducers(g, p, rid)) if (y.good === good) out.push([r2, i, y]);
   return out;
 }
-function canPayGood(g, p, actorRid, good) {
-  if (g.players[p].stock[good] > 0) return true;
-  return producersOf(g, p, actorRid, good).length > 0;
-}
 function tradeSeat(g) { return (g.act.market || g.act.port)[0]; }
 function regionTapSum(g, p, rid, exclude) {
   return tapProducers(g, p, rid).reduce((a, [, , y]) => a + (y.good === exclude ? 0 : y.n), 0);
@@ -655,7 +643,6 @@ function yieldOf(g, rid, i) {
   if (!bd || !BT[bd.t].yields) return null;
   return { good: BT[bd.t].yields, n: BT[bd.t].byRegion ? R[rid].f : bd.capGoods || 1 };
 }
-function stockSum(pl) { return Object.values(pl.stock).reduce((a, b) => a + b, 0); }
 // THE FOOD STORE — what survives the turning of the year. Grain does not keep: the palace
 // holds 1, and every granary at your command holds 2 more. Everything above it spoils at the
 // reckoning. Bronze, cloth and pottery keep without limit, and nothing is capped during the year.
@@ -682,7 +669,6 @@ function gain(g, p, good, n, why) {
 function myPalaces(g, p) { return works(g, (bd) => bd.t === "palace" && bd.o === p); }
 // every organ of state eats one; garrisons are militia and eat nothing
 function upkeepDue(g, p) { return { food: works(g, (bd) => isCrown(bd) && bd.o === p).length }; }
-function myAnnexes(g, p, rid) { return works(g, (bd, r) => r === rid && BT[bd.t].annex && bd.o === p).length; }
 function hasAnnex(g, p, rid, t) { return works(g, (bd, r) => r === rid && bd.t === t && bd.o === p).length > 0; }
 // WORKS — one walk over everything standing on the map. Every question of the form "which
 // buildings are…?" is this walk plus a predicate, so the walk is written once.
@@ -706,8 +692,6 @@ function markUsed(g, p, verb, rid) {
   g.spent[p] = g.spent[p] || {};
   (g.spent[p][verb] = g.spent[p][verb] || []).push(rid);
 }
-function inCommand(g, rid) { return g.act && rdist(g.act.palace, rid) <= 1; }
-
 // ---- legality ----
 // Which of your buildings can open an activation right now, and what it becomes.
 // Every seat building's whole specification, including WHICH VERBS IT OFFERS — the one
@@ -882,7 +866,11 @@ function forfeit(g, p) {
 // interface, and it travels in three directions:
 //
 //   commands ──Order.read──▶ ORDER ──Order.commands──▶ commands   (exact, no model)
-//                              └────────render───────▶ prose ──scribe──▶ commands  (model)
+//
+// There was a second direction once — render the order to prose, hand the prose to a model,
+// get commands back — and that half has been removed with the rest of the LLM court. What is
+// left is the exact half, and it stands on its own: it is how the engine states what an action
+// WAS, independently of the keystrokes that produced it.
 //
 // THIS LIVES IN THE ENGINE, beside ACTIONS and describeCmd, because it is knowledge ABOUT
 // COMMANDS and must change whenever they do. Order.commands is the inverse of
@@ -1031,9 +1019,9 @@ function orderMark(order, c, used, mode) {
 function orderCommands(g0, order, limit = 20) {
   const commands = [], used = [];
   let g = JSON.parse(JSON.stringify(g0));
-  // ONE ACTION-PROPER, then stop — the same three boundaries the scribe keeps: a command is
-  // spent, the activation closes, or THE DESK PASSES to another court (a raid hands the
-  // field to its defenders long before its command is spent).
+  // ONE ACTION-PROPER, then stop. Three boundaries end it, and all three are arithmetic
+  // rather than judgement: a command is spent, the activation closes, or THE DESK PASSES to
+  // another court (a raid hands the field to its defenders long before its command is spent).
   const capOf = (s) => (s.act ? s.act.capLeft : null);
   let baseline = capOf(g);
   const hadAct = !!g.act;
@@ -1741,13 +1729,6 @@ function entreatRemark(g, p, rid, nGifts) {
   }
   return `note: ${R[rid].n} is already your Subject at ${cur}; gifts here only offset the seat's hunger or bank garrison-call surplus${seatNote}.`;
 }
-function pendingGiftCount(g) {
-  const m = g.mode; if (!m || m.v !== "source" || m.kind !== "entreat") return 0;
-  if (m.phase === "stock") return (m.gifts || []).length;
-  const goods = new Set();
-  for (const [r2, i2] of m.taps || []) { const y = yieldOf(g, r2, i2); const bd = g.b[r2][i2]; if (y) goods.add(y.good); else if (bd && BT[bd.t].issues) goods.add(BT[bd.t].issues); }
-  return goods.size;
-}
 function describeCmd(g, c) {
   const nm = (rid) => (R[rid] && R[rid].n) || rid;
   switch (c.t) {
@@ -1812,34 +1793,6 @@ function describeCmd(g, c) {
     case "pass": return "PASS this go-around";
     default: return c.t;
   }
-}
-function climbText(g, p, rid) {
-  const rr = g.rel[p] && g.rel[p][rid]; if (!rr) return "";
-  const next = { none: ["Friend", FLOOR.friend], friend: ["Ally", FLOOR.ally], ally: ["Subject", FLOOR.subject] }[rr.s];
-  if (!next) return " (your Subject)";
-  const gap = next[1] - rr.i;
-  if (gap <= 0) return ` (${rr.s} ${rr.i} — ${next[0]} floor MET: a treaty locks it)`;
-  if (gap === 1) return ` (${rr.s} ${rr.i} — 1 short of ${next[0]}: one gift or one trade closes it)`;
-  return ` (${rr.s} ${rr.i} — to ${next[0]} gap ${gap}: ${Math.min(4, gap)} distinct goods, or gifts+trades; a lone +1 just decays)`;
-}
-function progressLine(g, p) {
-  const m = g.mode;
-  let line = `IN PROGRESS: activation at ${g.act.palace ? R[g.act.palace].n : "a trade seat"}${g.act.capLeft !== undefined ? `, ${g.act.capLeft} command(s) left — unspent commands DIE with the activation, and the building acts once per year` : ""}.`;
-  if (m && m.v === "source") {
-    {
-      const nG = pendingGiftCount(g);
-      const adv = nG ? entreatRemark(g, p, m.region, nG) : null;
-      if (adv) line += ` ADVISORY (pre-commit — you may still add gifts or step back): ${adv}`;
-    }
-    if (m.phase === "stock" && m.kind === "entreat")
-      line += ` Choosing embassy gifts for ${R[m.region].n} from the stockpile. ALREADY SELECTED: [${(m.gifts || []).join(", ") || "none"}]. Toggle ONLY goods not yet selected, then giftSend. Do NOT re-toggle a selected good — that deselects it.`;
-    else if (m.phase === "stock") line += ` Paying from the stockpile: ${m.need - (m.paid || []).length} more good(s), none of ${m.extracted}.`;
-    else line += ` Choosing payment (${m.kind}): srcStock for the stockpile, or tap producers of ONE region then commitTaps. TAPS SELECTED: [${(m.taps || []).map(([r2, i]) => r2 + ":" + i).join(", ") || "none"}].`;
-  } else if (m && m.v === "trade" && !m.src) line += ` TRADING at this seat — now choose which producer to BUY FROM (the source). Payment comes after.`;
-  else if (m && m.v === "build" && m.region) line += ` Choosing what to build in ${R[m.region].n}.`;
-  else if (m && m.v) line += ` Verb "${m.v}" chosen — now pick a target from the legal list.`;
-  else line += ` Choose a verb.`;
-  return line;
 }
 // What can be done RIGHT NOW — the headless driver's menu. Coarse but complete.
 function availableCommands(g) {
@@ -1984,8 +1937,6 @@ function effectiveSeat(g) {
 }
 // the raid's defenders are simply the contest's participants after the opener — there is one
 // cursor, and these read it rather than keeping a second copy in step with it
-function defenceOrder(g) { const c = g.contest; return c && c.kind === "raid" ? c.turnOrder.slice(1) : []; }
-function defenceIdx(g) { const c = g.contest; return c ? Math.max(0, c.idx - 1) : 0; }
 function currentDefender(g) {
   const c = g.contest;
   if (!g.raid || !c || c.kind !== "raid" || c.idx < 1) return null;
@@ -2133,9 +2084,6 @@ function clickSlot(g, rid, i) {
   }
 }
 
-function tapSum(g, m) {
-  return (m.taps || []).reduce((a, [rid, i]) => { const y = yieldOf(g, rid, i); return a + (y ? y.n : 0); }, 0);
-}
 // Selecting a sponsor. There used to be a second door to this — a `tapToggle` command the
 // panel sent while the map sent `slot` — and it was UNGATED, so it could tap a warrior in
 // another power's province. Only the panel's own filtering stood in the way. One door now,
@@ -2164,8 +2112,13 @@ function commitSourceTaps(g) {
     }
   }
   m.paid = costTakePaid(specOf(m), m, yields);
+  // WASTE IS INHERENT, and the chronicle must say so plainly. A farm's yield cannot be split,
+  // so whatever the bill did not need is simply unused — it is not banked, not refunded, and
+  // it does not stay with anyone. The old wording ("what the yield exceeded stays with the
+  // province") read as a rule about storage and misled its own author into filing two bug
+  // reports against the economy working correctly. See harness/KNOWN-ISSUES.md.
   const spill = GOODS.filter((t) => yields[t] > 0);
-  g.log.unshift(`${R[m.tapRegion].n} sponsors the ${m.kind}: ${m.paid.join(", ")}${spill.length ? "; what the yield exceeded stays with the province" : ""}.`);
+  g.log.unshift(`${R[m.tapRegion].n} sponsors the ${m.kind}: ${m.paid.join(", ")}${spill.length ? "; the rest of the yield goes to waste" : ""}.`);
   finishSourcing(g);
 }
 function stockCovers(g, p, m) { return costStockCovers(specOf(m), m, g.players[p].stock); }
@@ -2229,12 +2182,6 @@ function finishSourcing(g) {
     return;
   }
 }
-function canSource(g, p, actorRid, types) {
-  const stockOK = types.every((t) => g.players[p].stock[t] > 0);
-  const tapOK = types.length === 1 && producersOf(g, p, actorRid, types[0]).length > 0;
-  return stockOK || tapOK;
-}
-
 function legalBuildTypes(g) {
   const rid = g.mode.region;
   const p = g.turn;
@@ -2366,13 +2313,6 @@ function battleUnits(g, p, t, side, mode) {
 }
 const callable = (u) => u.terms !== "hire";                     // callable now; hirelings go to auction
 function eligibleAttackers(g, p, t, mode) { return battleUnits(g, p, t, "atk", mode).filter(callable); }
-function eligibleDefenders(g, q, t, mode) { return battleUnits(g, q, t, "def", mode || "land").filter(callable); }
-// The auction market is just the hire-terms units, grouped by people.
-function mercRegions(g, t, mode) {
-  const by = {};
-  for (const u of battleUnits(g, g.turn, t, "atk", mode || "land")) if (u.terms === "hire") (by[u.people] = by[u.people] || []).push(u);
-  return Object.keys(by).map((rid) => ({ rid, bands: by[rid].length, units: by[rid] }));
-}
 // A unit joins a battle by being PAID FOR. That is the only difference between them:
 //   own     — no price
 //   allied  — 1 influence in its region (free if it is the battlefield itself)
@@ -2419,11 +2359,6 @@ function uncommitUnit(g, side, rid, i) {
   if (c.port >= 0 && c.port != null) g.b[c.rid][c.port].tap = false;
   list.splice(idx, 1);
   g.log.unshift(`${PNAME[who]} stands down the unit of ${R[rid].n}${c.paidInf || c.paidGood ? " (payment refunded)" : ""}.`);
-}
-function basketOf(list, peopleRid) {
-  const b = { food: 0, bronze: 0, cloth: 0, pottery: 0 };
-  for (const c of list) if (c.terms === "hire" && c.rid === peopleRid && c.paidGood) b[c.paidGood]++;
-  return b;
 }
 // ONE way to put a unit in the field or take it out again: the `slot` command, read by the
 // mode it arrives in. There used to be a second spelling — a `unit` command from the panel
@@ -2647,34 +2582,42 @@ function perish(g, rid, i) {
   }
 }
 
-// ------------------------------------------------------------------
+// ==================================================================
+//  THE ENGINE'S SURFACE
+// ==================================================================
+// EXPORT NOTHING WITHOUT A CALLER. This list was 163 names, of which 109 had no consumer
+// anywhere and 13 were never called at all — the 13 are gone, and what is left below is
+// exactly what the table and the harness ask for. The list is not a menu of capabilities:
+// every rule in here is reachable through `dispatch` and describable through `view`, and an
+// export that bypasses those two is a second way to ask a question the engine already
+// answers. That is the shape of every bug this project has had.
+//
+// If a new consumer needs a name, add it here deliberately and say who needs it. If you are
+// adding one so the interface can decide whether something is allowed, stop: that answer
+// belongs in `availableCommands`.
 export {
-  view, foodRots,
-  ACTIONS, ADJ, ANNEX_ACTORS, BT, COASTAL, FLOOR,
-  GOODS, HOME, NB, NOT_THE_WORLD, ORDER_NEVER, Order,
-  PALACE_VERBS, PCOL, PLAYERS, PNAME, R, RANK,
-  REG, SLETTER, TRADE, UNGATED, activatable, activeB,
-  actorKind, advanceChain, applyCommand, autoMuster, available, availableCommands,
-  basketOf, battleUnits, beginActivation, bidDominates, biddablePeoples, buildSlotFor,
-  callable, canFeedBuild, canPayGood, canSource, canonical, capacityOf,
-  clickRegion, clickSlot, climbText, cmdKey, commitSourceTaps, commitUnit,
-  contestActor, contestBasket, contestLay, contestOpen, contestPartyOf, contestRefund,
-  contestWinner, costCaption, costShortfall, costStockCovers, costStockPayFixed, costTakePaid, costTapCovered, tapYields,
-  costTapDead, currentDefender, defenceIdx, defenceOrder, defendersOf, describeCmd,
-  diploReach, dispatch, doStrike, effectiveSeat, eligibleAttackers, eligibleDefenders,
-  endActivation, endRaid, entreatRemark, evictOrgans, executeBuild, fingerprint,
-  finishSourcing, finishUpkeep, foodStore, foremostIn, forfeit, fortressDef,
-  gain, hasActive, hasAnnex, hostilesIn, inCommand, infOf,
-  initState, isActingBuilding, isCoastal, isCommitted, isCrown, launchRaid,
-  legalBuildTypes, legalTargets, live, mapOnlyStep, markUsed, mercRegions,
-  myAnnexes, myPalaces, nextDefender, nextPlayer, orderAllows, orderCommands,
-  orderMark, orderRead, orderSetShaped, others, overland, overseasPorts,
-  pendingGiftCount, perish, placeBuild, portIn, producersOf, progressLine,
-  raidStrength, rank, rdist, reach, readyB, regionTapSum,
-  rejectReason, relationsUpkeep, resolveRaid, resolveSubversion, runUpkeep, seated,
-  setStatus, sideList, sidePlayer, sourceStockGifts, sourceStockUnit, specOf,
-  spend, stockCovers, stockSum, tapProducers, tapRegionsOf, tapSum,
-  toggleSourceTap, toggleUnit, tradeAfford, tradeSeat, tradeSourcesExist, uncommitUnit,
-  unitPrice, unitReaches, upkeepDue, usable, usedOn, validCmd,
-  verbsOf, works, yieldOf,
+  // THE DOORS — the whole API for anything that plays the game.
+  initState, dispatch, availableCommands, view, validCmd,
+
+  // THE WORLD, as it is named and drawn. Facts about the map, not rules about it.
+  BT, HOME, NB, PCOL, PLAYERS, PNAME, R, REG, SLETTER,
+
+  // THE DIGESTS — same trajectory? (`g.chain`, carried on the state) · same position?
+  fingerprint,
+
+  // WHOSE MOVE IT IS. `live` lists the seated powers; `effectiveSeat` says whose desk the
+  // next command comes from, which is not always `g.turn` — a contest passes it round.
+  live, effectiveSeat,
+
+  // WHETHER THE BOARD IS THE WORKPLACE, for a phone deciding how much panel to show.
+  mapOnlyStep,
+
+  // ORDERS — the pivot between commands and intent. harness/engine/test-orders.js walks the
+  // engine's own play through this and back, which is the command layer's regression test.
+  Order,
+
+  // READ BY THE SUITES ONLY. These let a test assert against a rule directly instead of
+  // inferring it from play. Nothing in the interface may call them.
+  costTapCovered, foodRots, foodStore, foremostIn, infOf, legalTargets,
+  specOf, tapYields, upkeepDue, usable, yieldOf,
 };

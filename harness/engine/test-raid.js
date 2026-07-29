@@ -23,7 +23,6 @@ function scenario(opts = {}) {
 }
 
 function openRaid(g) {
-  const st = M.activeStables ? null : null;
   // activate the stables, choose the raid verb, target Qadesh
   const act = M.availableCommands(g).find((c) => c.t === "activate" && c.rid === M.HOME.B && g.b[M.HOME.B][c.i] && g.b[M.HOME.B][c.i].t === "stables");
   g = M.dispatch(clone(g), act);

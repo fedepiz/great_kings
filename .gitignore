@@ -1,11 +1,19 @@
-# Generated, and not worth keeping. Everything here is rebuilt by ./harness/run-all.sh.
+# Generated, and not worth keeping. Everything here is rebuilt by ./harness/run-all.sh or
+# `npm run build`. If a generated file is ever committed, `npm run build` produces a diff for
+# every developer who runs it — which is exactly what levant-prototype-v25.jsx used to do,
+# 191KB at a time, because it carried a build timestamp in its header.
 node_modules/
 package-lock.json
 
-# the engine bundle the tests import, and the differential's accepted baseline
+# the browser bundle and the stylesheet esbuild emits alongside it
+levant/main.js
+levant/main.js.map
+levant/main.css
+levant/main.css.map
+
+# the engine as the suites import it, and the differential's accepted baseline
 harness/new.cjs
 harness/ref.cjs
 
 # scratch copies
-*.bak
 *.bak*

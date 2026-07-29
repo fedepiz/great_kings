@@ -1,262 +1,43 @@
 // =====================================================================
 //  THE GREAT KINGS — THE TABLE
 // =====================================================================
-//  The hot-seat interface, and the scribe desk. Everything here is presentation and
-//  interaction; the rules live in engine.js and are imported, never restated.
+//  The hot-seat interface. Everything here is presentation and interaction; the rules live
+//  in engine.js and are imported, never restated.
 // =====================================================================
 
 import React, { useState, useRef } from "react";
 // THE TABLE'S WHOLE REACH INTO THE ENGINE. It was ~90 calls, then two — legalTargets for the
-// map and progressLine for the scribe — and the map's is now gone: the board draws from
-// `view` like everything else. What is left is not the rules but the WORLD (names, colours,
-// coordinates, neighbours) and the four doors: ask what the state shows (`view`), ask what a
-// model may do (`availableCommands` / `describeCmd`), send one command (`dispatch`), start
-// over (`initState`).
+// map and progressLine for the scribe — and both are gone: the board draws from `view` like
+// everything else, and the scribe desk that needed `progressLine` has been removed. What is
+// left is not the rules but the WORLD (names, colours, coordinates, neighbours) and three
+// doors: ask what the state shows (`view`), send one command (`dispatch`), start over
+// (`initState`). `live` and `mapOnlyStep` are the only other calls, and neither decides what
+// may be done — one lists the seated powers, the other says whether the board is where the
+// work is on a phone.
 //
-// Thirty-three names outlived their last caller during the `view` migration and sat here
-// importing rules nobody read. An unused import of a rule is an invitation to enforce it
-// here, which is how every UI-enforced rule in this project got in.
+// Keep this list minimal. An unused import of a rule is an invitation to enforce it here,
+// which is how every UI-enforced rule in this project got in.
 import {
   BT, HOME, NB, PCOL, PNAME, R, REG, SLETTER,          // the world, as it is named and drawn
-  availableCommands, describeCmd, dispatch, effectiveSeat, initState,
-  live, mapOnlyStep, progressLine, view,
+  dispatch, initState, live, mapOnlyStep, view,
 } from "./engine.js";
 
 export default function App() {
   const [g, setG] = useState(initState);
   const upd = (fn) => setG((old) => { const n = JSON.parse(JSON.stringify(old)); fn(n); return n; });
   const p = g.turn;
-  const bothPassed = live(g).every((q) => g.passed[q]);
 
   const serif = { fontFamily: "Iowan Old Style, Palatino Linotype, Palatino, Georgia, serif" };
   const mono = { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" };
 
   // A click is written against the board the player is LOOKING AT, so it carries that
-  // world's hash. If the scribe landed a command while they were looking, the click is
-  // refused rather than applied to a board they never saw. An explicit stamp (the scribe's)
-  // is left alone.
+  // world's hash. If anything else lands a command while they are looking, the click is
+  // refused rather than applied to a board they never saw. Nothing else does, in a hot seat —
+  // but the stamp costs nothing and it is what makes a slow agent safe on shared state later.
+  // A command that arrives already stamped is left alone.
   const go = (cmd) => upd((n) => dispatch(n, cmd && cmd.chain === undefined ? { ...cmd, chain: g.chain } : cmd));
-  const gRef = React.useRef(g); gRef.current = g;
   const [modal, setModal] = useState(null); // { title, lines }
 
-  // ==================================================================
-  //                        THE SCRIBE
-  // ==================================================================
-  // An interface layer, not part of the core: it renders what the engine already
-  // knows, asks for ONE command, and dispatches it. The core is untouched and does
-  // not know a model exists.
-  //
-  // THE LAYERS, outermost first:
-  //   sendAllToScribe(list) — several directives in order
-  //   sendToScribe(text)    — ONE directive, carried through to a completed action.
-  //                           This is the scribe: the loop that decides when it is done.
-  //   scribeMessage(...)    — the message it is sent (pure; no I/O)
-  //   callModel(prompt)     — transport: HTTP, retries, JSON. No game knowledge.
-  //   matchOnMenu(g, obj)   — is the reply a command actually on offer?
-  //
-  // CONCURRENCY. A model call is slow and the world may move during it, so every request
-  // is a PACKET naming the power it speaks for, and every step begins with ONE atomic read:
-  //
-  //     snapshot ← world
-  //     h    = snapshot.chain            ─ taken FIRST, so hash and desk describe one world
-  //     desk = effectiveSeat(snapshot)
-  //     if desk ≠ packet.power  → DROP the packet before calling the model
-  //     …build, call, and dispatch the answer stamped with h…
-  //
-  // Two failures, two meanings, two responses:
-  //   · SEAT MISMATCH — this is not our desk. No call is made, nothing is retried, and the
-  //     seat's queue is LEFT INTACT: a raid hands the desk to each protector and then gives
-  //     it back, and the attacker's plan must survive the round trip. Costs no budget.
-  //   · STALE STAMP — still our desk, but the world moved while we were thinking. The
-  //     directive is still good; re-read the world and ask again. Costs budget, because a
-  //     scribe retrying forever against a moving world is the old vizier wearing a new hat.
-  //
-  // Single-flight remains the practice — each message is built from the state the last
-  // command produced, so there is nothing to overlap — but correctness no longer depends
-  // on that discipline holding.
-  //
-  // The shape below is not a guess. It is the configuration the bench measured at
-  // 97.5% per step, against 72.5% for the same model given a whole activation's plan
-  // (see harness/SCRIBE-FINDINGS.md). Three things carry that difference:
-  //   · ONE ACTION PER DIRECTIVE. The scribe never sees later steps. Position errors
-  //     went 8 → 5 → 0 across whole-plan, whole-plan-with-a-marker, and per-action.
-  //   · GLOSSES. Every legal command carries describeCmd's account of what it does.
-  //   · GROUNDING. Where things stand, and what has been done since this action began.
-  // Change any of it and the number is no longer the number that was measured.
-  // ==================================================================
-  const SCRIBE_MODEL = "claude-sonnet-4-6";
-  const SCRIBE_MAX_STEPS = 16;    // measured: an action takes 6.2 dispatches, p90 12
-  const SCRIBE_MAX_STALE = 3;     // re-readings allowed before we admit we cannot keep up
-  const SCRIBE_PACE = 320;        // ms between commands, so the board can be watched
-  const [scribeBusy, setScribeBusy] = useState(false);
-  const [scribeLog, setScribeLog] = useState([]);   // { step, cmd, gloss, note, raw }
-  const scribeStop = React.useRef(false);
-  const busyRef = React.useRef(false);              // the desk is held here, not in render state
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-  // THE MESSAGE the scribe is sent, assembled exactly as the bench assembled it.
-  function scribeMessage(gg, text, sinceLen) {
-    const menu = availableCommands(gg).filter((c) => !["forfeit", "pass"].includes(c.t));
-    const L = [];
-    L.push("You are the scribe of a Late Bronze Age court, carrying out an instruction one command at a time.");
-    L.push("");
-    L.push("THE LEGAL COMMANDS RIGHT NOW — choose exactly ONE and copy its JSON verbatim:");
-    for (const c of menu) {
-      const clean = { ...c }; delete clean.standing; delete clean.b;
-      L.push(`  ${JSON.stringify(clean)} — ${describeCmd(gg, c)}`);
-    }
-    L.push("");
-    L.push("WHERE THINGS STAND: " + (gg.act ? progressLine(gg, gg.turn)
-      : gg.raid ? `A raid is under way at ${R[gg.raid.t].n}.` : "No activation is open."));
-    L.push("");
-    const done = gg.log.slice(0, Math.max(0, gg.log.length - sinceLen)).reverse().slice(-10);
-    if (done.length) {
-      L.push("DONE SO FAR IN THIS ACTION (oldest first):");
-      for (const l of done) L.push("  " + (l.length > 150 ? l.slice(0, 150) + "…" : l));
-      L.push("");
-    }
-    L.push(`YOUR INSTRUCTION: "${text}"`);
-    L.push("");
-    L.push("Reply with ONLY the JSON of one command from the list above. No prose, no fences.");
-    return L.join("\n");
-  }
-
-  // THE MODEL CALL. Transport and nothing else: it knows about HTTP, rate limits and
-  // JSON, and knows nothing about the game, the menu or what a scribe is. Swap the model
-  // or the provider and this is the only function that changes.
-  // A call that never returned is not an answer: retry, then give up loudly.
-  async function callModel(prompt, tries = 4) {
-    let last = null;
-    for (let a = 0; a < tries; a++) {
-      if (a) await sleep(700 * Math.pow(2, a - 1) + Math.random() * 300);
-      try {
-        const res = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ model: SCRIBE_MODEL, max_tokens: 300, messages: [{ role: "user", content: prompt }] }),
-        });
-        if (res.status === 429 || res.status >= 500) { last = new Error("HTTP " + res.status); continue; }
-        const raw = await res.text();
-        let data; try { data = JSON.parse(raw); } catch (e) { last = new Error("non-JSON reply"); continue; }
-        if (data.error) { last = new Error(data.error.message || "API error"); if (!/rate|overload|capacity/i.test(last.message)) break; continue; }
-        const text = (data.content || []).map((b) => b.text || "").join("").replace(/```json|```/g, "").trim();
-        let obj = null;
-        try { obj = JSON.parse(text); } catch (e) {
-          const i = text.indexOf("{"), j = text.lastIndexOf("}");
-          if (i >= 0 && j > i) { try { obj = JSON.parse(text.slice(i, j + 1)); } catch (e2) {} }
-        }
-        return { text, obj };
-      } catch (e) { last = e; }
-    }
-    throw last || new Error("no answer");
-  }
-
-  // Is the reply a command actually on offer? The one place that knows the menu's shape.
-  function matchOnMenu(gg, obj) {
-    if (!obj) return null;
-    return availableCommands(gg).find((c) => {
-      const clean = { ...c }; delete clean.standing; delete clean.b;
-      return JSON.stringify(clean) === JSON.stringify(obj);
-    }) || null;
-  }
-
-  // ONE ACTION-PROPER, then stop. The boundary is arithmetic, not judgement: a spent
-  // command decrements capLeft, and a closed activation ends the action outright.
-  // ONE STEP: at most one model call and one dispatch. The whole concurrency protocol
-  // lives here, so the loops above it stay simple.
-  async function scribeStep(packet) {
-    const snap = gRef.current;                     // ONE read of the world…
-    const chain = snap.chain;                              // …hash first…
-    const desk = effectiveSeat(snap);              // …then whose desk it is
-    if (desk !== packet.power) return { kind: "not-our-desk", desk };
-    if (snap.shortfall) return { kind: "interrupted" };
-
-    let answer;
-    try { answer = await callModel(scribeMessage(snap, packet.text, packet.sinceLen)); }
-    catch (e) { return { kind: "unanswered", detail: e.message }; }
-
-    const cmd = matchOnMenu(snap, answer.obj);
-    if (!cmd) return { kind: "off-menu", raw: answer.text };
-
-    go({ ...cmd, chain });                             // stamped with the world we read
-    await sleep(SCRIBE_PACE);
-    // Refused? The chain did not move. That is how we learn the stamp was stale.
-    if (gRef.current.chain === chain) return { kind: "stale", cmd };
-    return { kind: "done", cmd, gloss: describeCmd(snap, cmd) };
-  }
-
-  // SEND ONE DIRECTIVE TO THE SCRIBE, who carries it out: consulting the model, checking
-  // each answer against the live menu, dispatching, and stopping when the action-proper is
-  // done. This IS the scribe — the loop, not the API call. It reads nothing from the
-  // interface and knows nothing about a text box, so a planner, a queue or a test calls it
-  // exactly as the button does. Returns why it stopped, so a caller can decide what next.
-  async function sendToScribe(text, power) {
-    text = String(text || "").trim();
-    if (!text) return { ok: false, reason: "empty directive" };
-    if (busyRef.current) return { ok: false, reason: "the scribe is already at the desk" };
-    busyRef.current = true;
-    setScribeBusy(true); scribeStop.current = false; setScribeLog([]);
-
-    // THE PACKET names the power it speaks for. Ownership can change between the moment a
-    // directive is written and the moment it is worked on; the packet is how the step knows.
-    const packet = { power: power || effectiveSeat(gRef.current), text, sinceLen: gRef.current.log.length };
-    const note = (n) => setScribeLog((L) => [...L, n]);
-
-    let baseline = gRef.current.act ? gRef.current.act.capLeft : null;
-    const hadAct = !!gRef.current.act;
-    let steps = 0, stale = 0, calls = 0;
-    let outcome = { ok: false, reason: "the scribe found no end", steps: 0 };
-    const finish = (ok, reason) => { outcome = { ok, reason, steps, stale }; };
-
-    while (steps < SCRIBE_MAX_STEPS && calls < SCRIBE_MAX_STEPS + SCRIBE_MAX_STALE) {
-      if (scribeStop.current) { note({ note: "The king dismisses the scribe." }); finish(false, "dismissed"); break; }
-      calls++;
-      const r = await scribeStep(packet);
-
-      if (r.kind === "not-our-desk") {
-        note({ note: `The desk has passed to ${PNAME[r.desk] || "another court"}; the instruction waits.` });
-        finish(false, "not our desk"); break;       // the packet is dropped, the plan is not
-      }
-      if (r.kind === "interrupted") { note({ note: "The court has other business first." }); finish(false, "interrupted"); break; }
-      if (r.kind === "unanswered") { note({ note: "No answer from the scribe — " + r.detail }); finish(false, "unanswered"); break; }
-      if (r.kind === "off-menu") { note({ note: "The scribe writes something that is not on the menu.", raw: r.raw }); finish(false, "off-menu"); break; }
-      if (r.kind === "stale") {
-        stale++;
-        note({ note: "The world moved while the scribe was writing; it reads again." });
-        if (stale > SCRIBE_MAX_STALE) { finish(false, "kept losing the thread"); break; }
-        continue;                                    // same directive, fresh reading
-      }
-
-      steps++;
-      note({ step: steps, cmd: r.cmd, gloss: r.gloss });
-
-      const n = gRef.current;
-      if (effectiveSeat(n) !== packet.power) { finish(true, "the desk passed with the action"); break; }
-      if (hadAct || baseline !== null) {
-        if (!n.act) { note({ note: "The activation closes." }); finish(true, "activation closed"); break; }
-        if (baseline != null && n.act.capLeft < baseline) { note({ note: "The command is spent — the action is complete." }); finish(true, "action complete"); break; }
-      } else if (n.act) {
-        baseline = n.act.capLeft;            // the activation has just opened; measure from here
-      }
-    }
-    if (steps >= SCRIBE_MAX_STEPS) note({ note: `The scribe has written ${steps} times without finishing; the court stops it.` });
-    busyRef.current = false;
-    setScribeBusy(false);
-    return outcome;
-  }
-
-  // SEVERAL DIRECTIVES IN ORDER — a planner's whole turn, or a scripted opening. Stops the
-  // moment one fails, because a plan whose second step assumed the first is not worth
-  // continuing blind.
-  async function sendAllToScribe(list) {
-    const out = [];
-    const power = effectiveSeat(gRef.current);
-    for (const d of list) {
-      const r = await sendToScribe(d, power);   // every directive speaks for the same court
-      out.push({ directive: d, ...r });
-      if (!r.ok || scribeStop.current) break;
-    }
-    return out;
-  }
   const closeModal = () => setModal(null);
   const [isMobile, setIsMobile] = useState(typeof window !== "undefined" && window.innerWidth < 700);
   React.useEffect(() => {
@@ -300,7 +81,7 @@ export default function App() {
   const onSheetDown = (e) => { sheetDrag.current = { y: e.clientY, h: sheetDragH ?? SNAPS()[sheet] }; };
   const onSheetMove = (e) => {
     if (!sheetDrag.current) return;
-    const h = Math.max(70, Math.min(window.innerHeight * 0.92, sheetDrag.current.chain + (sheetDrag.current.y - e.clientY)));
+    const h = Math.max(70, Math.min(window.innerHeight * 0.92, sheetDrag.current.h + (sheetDrag.current.y - e.clientY)));
     setSheetDragH(h);
   };
   const onSheetUp = () => {
@@ -355,9 +136,11 @@ export default function App() {
   const cx = (r) => r.x + regW(r) / 2;
   const cy = (r) => r.y + regH / 2;
 
+  // A power's own capital says "home" rather than a relation to itself. Every seat has one:
+  // this used to name only Egypt and Hatti, from when there were fewer of them, so the other
+  // three capitals drew relation numbers where the first two drew a word.
   function relLine(rid) {
-    if (rid === HOME.E) return [["E", "home", PCOL.E]];
-    if (rid === HOME.H) return [["H", "home", PCOL.H]];
+    for (const q of Object.keys(HOME)) if (rid === HOME[q]) return [[q, "home", PCOL[q]]];
     const parts = [];
     for (const q of live(g)) {
       const rr = g.rel[q][rid];
@@ -370,14 +153,15 @@ export default function App() {
   const titleBlock = () => (<>
           <div className="flex items-baseline justify-between">
             <h1 className="text-xl" style={serif}>The Great Kings</h1>
-            <span style={mono} className="text-xs opacity-70">round {g.round} · v0.25 · five kings</span>
+            <span style={mono} className="text-xs opacity-70">round {g.round} · five kings</span>
           </div>
   </>);
   // ============ THE TABLE DRAWS WHAT THE STATE SAYS ============
-  // One question — view(g) — one structure. These renderers know four PRESENTATIONAL kinds
-  // and nothing else: not what a command is, not whether a payment suffices, not that raids
-  // differ from embassies. Each option carries its own command; clicking ships it back
-  // verbatim. A new verb needs no change here.
+  // One question — view(g) — one structure. `drawPanel` below knows five PRESENTATIONAL kinds
+  // (note · notice · choices · facts · sides) and nothing else: not what a command is, not
+  // whether a payment suffices, not that raids differ from embassies. `map` is the sixth kind
+  // and the board draws it, not the column. Each option carries its own command; clicking
+  // ships it back verbatim. A new verb needs no change here.
   // The TABLE decides what a fact looks like. The state says an option is chosen, idle or
   // blocked, and what kind of thing it is; the colours below are this table's reading of
   // that — another front end could read the same facts quite differently.
@@ -422,7 +206,6 @@ export default function App() {
       );
     }
     if (pan.kind === "choices") {
-      // `pick` says what the options are to each other; this table reads that as a shape.
       // `pick` says what the options are to each other; this table reads that as a shape.
       // Everything wraps: a row that cannot wrap puts buttons on top of one another.
       const shell = pan.pick === "one" ? "grid grid-cols-2 gap-1" : "flex flex-wrap gap-1";
@@ -497,13 +280,6 @@ export default function App() {
   // A place may host several options at once; the first that may be taken is what a click on
   // it means. A blocked one still carries its `why`, which is what the hover says.
   const takeable = (os) => (os || []).find((o) => o.cmd) || null;
-  const fromView = (...ids) => {
-    const pre = ids.filter((x) => x.endsWith(":"));
-    const exact = new Set(ids.filter((x) => !x.endsWith(":")));
-    return <>{view(g).panels
-      .filter((pan) => exact.has(pan.id) || pre.some((x) => String(pan.id).startsWith(x)))
-      .map(drawPanel)}</>;
-  };
 
   // THE COURTS as the state reports them: stores, what is due, what winter will take. The
   // panel used to compute the spoilage itself — a rule in a card. It reads facts now.
@@ -522,54 +298,6 @@ export default function App() {
               ))}
             </div>
           ))}
-  </>);
-  // every control the turn actually needs: on desktop it sits high in the panel, on the
-  // phone it is docked to the foot of the sheet where the thumb already is
-  // THE DESK is only a way to type a directive and hand it over. It owns its own text and
-  // nothing else; the carrying-out belongs to sendToScribe(), which does not know it exists.
-  const [deskText, setDeskText] = useState("");
-  const sendDesk = () => sendToScribe(deskText);
-  const scribeDesk = () => (<>
-    {!g.shortfall && !bothPassed && g.turn === p && (
-      <div className="mt-2 p-2 rounded" style={{ background: "#1F1B14", border: `1px solid ${scribeBusy ? "#6E9A86" : "#3A3226"}` }}>
-        <div className="text-xs mb-1" style={{ ...mono, color: "#8A7346", letterSpacing: ".08em" }}>
-          THE SCRIBE — one instruction, one action
-        </div>
-        <div className="flex gap-2 items-start">
-          <textarea
-            value={deskText} onChange={(e) => setDeskText(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) sendDesk(); }}
-            placeholder="Raise a granary at Nippur, paying with Nippur's farm"
-            rows={2}
-            style={{ flex: 1, background: "#15130E", color: "#EDE4CF", border: "1px solid #3A3226", borderRadius: 3,
-                     padding: "6px 8px", lineHeight: 1.45, resize: "vertical", ...mono,
-                     // iOS zooms the page for any field under 16px. The map is pinch-zoomable
-                     // and must stay that way, so the type grows rather than the viewport locking.
-                     fontSize: isMobile ? 16 : 12 }} />
-          {scribeBusy ? (
-            <button onClick={() => { scribeStop.current = true; }}
-              style={{ background: "#5C2B2B", color: "#EDE4CF", border: "1px solid #8A4A4A", borderRadius: 3,
-                       padding: "8px 14px", fontSize: 12, cursor: "pointer", ...mono }}>■ stop</button>
-          ) : (
-            <button onClick={sendDesk} disabled={!deskText.trim()}
-              style={{ background: deskText.trim() ? "#2F5548" : "#2A241B", color: deskText.trim() ? "#EDE4CF" : "#6B624F",
-                       border: `1px solid ${deskText.trim() ? "#4A7A6B" : "#3A3226"}`, borderRadius: 3,
-                       padding: "8px 16px", fontSize: 12, cursor: deskText.trim() ? "pointer" : "default",
-                       fontWeight: 600, ...mono }}>go</button>
-          )}
-        </div>
-        {scribeLog.length > 0 && (
-          <div className="mt-2 p-2 rounded text-xs" style={{ background: "#15130E", maxHeight: 132, overflowY: "auto", ...mono, lineHeight: 1.5 }}>
-            {scribeLog.map((e, i) => (
-              <div key={i} style={{ color: e.note ? "#C9A06A" : "#A2957A", marginBottom: 2 }}>
-                {e.note ? `— ${e.note}` : `${e.step}. ${e.gloss}`}
-                {e.raw && <div style={{ color: "#B4634A", marginTop: 2 }}>{e.raw.slice(0, 160)}</div>}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    )}
   </>);
   // THE PANEL IS THE SKELETON. Every branch it used to hold — which building, which verb,
   // the sourcing, the assembly, the bidding — is a band the state fills or leaves empty.
@@ -765,12 +493,10 @@ export default function App() {
             {chronicleBlock()}
           </div>
           <div ref={dockRef} style={{ flexShrink: 0, margin: "8px -16px -16px", padding: "8px 16px 16px", background: "#1F1B14", borderTop: "1px solid #6B5B3E", maxHeight: "86vh", overflowY: "auto" }}>
-            {scribeDesk()}
             {actionPanel()}
           </div>
         </>) : (<>
           {titleBlock()}
-          {scribeDesk()}
           {actionPanel()}
           {powerCards()}
         </>)}

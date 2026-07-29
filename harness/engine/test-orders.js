@@ -116,4 +116,7 @@ const rr = M.Order.commands(M.initState(), nonsense);
 ok(!rr.commands.length, "an order naming what does not exist produces no commands");
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
-process.exit(fail ? 0 : 0);
+// This read `fail ? 0 : 0` — the suite the README calls the command layer's regression test
+// could not fail, whatever it found. Both branches returned success, so run-all.sh printed its
+// count and moved on.
+process.exit(fail ? 1 : 0);

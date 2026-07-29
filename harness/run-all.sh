@@ -1,50 +1,76 @@
 #!/bin/bash
-# Everything, in one command. Run before calling any engine change done.
+# =====================================================================
+# run-all.sh — everything. Run before calling any engine change done.
+# =====================================================================
+# There is no artifact assembly step any more, so the three guards this file used to carry
+# against a build that lied — a stale bundle, a duplicate declaration from concatenating two
+# sources, a stray import surviving the assembly — have nothing left to guard. What replaced
+# them is simpler and stricter: every check below reads levant/engine.js and levant/app.jsx
+# as written.
+#
+# The one lesson from that era still worth keeping: A GUARD THAT ONLY EVER LOOKS AT BUILD
+# OUTPUT CANNOT SEE A FAULT IN WHAT THE BUILD THROWS AWAY. Nothing here looks at build output.
+# =====================================================================
+# pipefail IS LOAD-BEARING, not tidiness. Every check below pipes its output through grep or
+# sed to indent it, and without pipefail a pipeline reports the exit status of the LAST command
+# — so `node test.js | sed …` succeeds no matter what the test did. That is not hypothetical:
+# the render smoke test this file used to run was invoked as `node smoke.cjs | head -1`, and it
+# had been FAILING — asserting on a string the interface does not render. `head` exited 0, so
+# `set -e` never fired, and `head -1` printed the one line before the error message. run-all.sh
+# reported a pass on a failing test, for as long as that test existed.
+set -eo pipefail
 cd "$(dirname "$0")/.."
-set -e
-echo "— build —"
-node build-game.js | sed 's/^/  /'
+
+# harness/new.cjs is the engine as the suites import it, and harness/ref.cjs is the
+# differential's accepted baseline. Both are generated; neither is committed.
+echo "— engine bundle —"
+rm -f harness/new.cjs
 npx esbuild levant/engine.js --format=cjs --bundle --outfile=harness/new.cjs >/dev/null
+echo "  harness/new.cjs"
+
 echo "— differential —"
-# The reference is a generated baseline: a copy of the bundle at a point whose play was
-# accepted. A fresh clone has none, so the first run establishes one and has nothing to
-# compare against — that is expected, not a pass.
+# The reference is a copy of the bundle at a point whose play was accepted. A fresh clone has
+# none, so the first run establishes one and has nothing to compare against — that is
+# expected, and it is not a pass.
 if [ ! -f harness/ref.cjs ]; then
   cp harness/new.cjs harness/ref.cjs
   echo "  no reference — baseline established from this build (nothing compared)"
 else
   ./harness/engine/diff.sh
 fi
+
+# A SUITE'S EXIT CODE IS THE RESULT; its count line is only a summary. This loop used to print
+# the count and drop the status on the floor, which meant `test-orders.js` — whose exit was
+# `fail ? 0 : 0` and could not report a failure at all — looked identical to a passing suite.
+# Now a non-zero exit prints the whole run and stops everything.
 echo "— engine suites —"
 cd harness/engine
 for f in economy ownership war raid subvert verbs commands hash orders view; do
-  printf "  %-10s " $f; node test-$f.js 2>&1 | grep "passed," | tail -1
+  printf "  %-10s " $f
+  if out=$(node test-$f.js 2>&1); then
+    echo "$out" | grep "passed," | tail -1
+  else
+    echo "FAILED"
+    echo "$out" | sed 's/^/    /'
+    exit 1
+  fi
 done
 cd ../..
-# THE SOURCES MUST COMPILE ON THEIR OWN. build-game.js strips the imports before it
-# concatenates, so a fault in the import block never reaches the built file and every check
-# downstream passes. app.jsx imported `view` TWICE and nothing noticed: the artifact was
-# fine, the source was not valid JavaScript, and the next person to open it in a bundler or
-# an editor would have met an error the whole harness said did not exist.
-echo "— the SOURCES compile on their own —"
-for f in levant/engine.js levant/app.jsx; do
-  if npx esbuild "$f" --bundle --outfile=/dev/null --external:react --external:react-dom/server >/dev/null 2>/tmp/srcerr
+
+# THE SOURCES MUST COMPILE ON THEIR OWN. engine.js is checked by the bundle above; app.jsx is
+# not imported by any suite, so without this a fault in it reaches nothing but the browser.
+echo "— the sources compile —"
+for f in levant/engine.js levant/app.jsx levant/main.jsx; do
+  if npx esbuild "$f" --bundle --outfile=/dev/null \
+       --external:react --external:react-dom --external:react-dom/client --external:react-dom/server \
+       --external:./table.css >/dev/null 2>/tmp/gk-srcerr
     then echo "  $f: compiles"
-    else echo "  $f: BROKEN"; sed 's/^/    /' /tmp/srcerr; exit 1; fi
+    else echo "  $f: BROKEN"; sed 's/^/    /' /tmp/gk-srcerr; exit 1; fi
 done
-echo "— the PUBLISHED artifacts compile and render —"
-for f in /mnt/user-data/outputs/levant-prototype-v25-core.jsx /mnt/user-data/outputs/orders-bench.jsx; do
-  [ -f "$f" ] || continue
-  cp "$f" /tmp/pub-check.jsx
-  if npx esbuild /tmp/pub-check.jsx --loader:.jsx=jsx --outfile=/tmp/pub-check.js >/dev/null 2>&1
-    then echo "  $(basename $f): compiles"
-    else echo "  $(basename $f): BROKEN — do not upload"; fi
-done
-# NEVER hide the build, and never run a stale bundle. Both were true here once: a duplicate
-# declaration broke the artifact, esbuild reported it, the output was sent to /dev/null, and
-# node then ran the PREVIOUS bundle and printed RENDER OK. The test passed; the game did not.
-rm -f /tmp/smoke.cjs /tmp/smokem.cjs
-npx esbuild smoke.jsx --loader:.jsx=jsx --bundle --format=cjs --platform=node --outfile=/tmp/smoke.cjs
-npx esbuild smoke-mobile.jsx --loader:.jsx=jsx --bundle --format=cjs --platform=node --outfile=/tmp/smokem.cjs
-node /tmp/smoke.cjs | head -1
-node /tmp/smokem.cjs | head -1
+
+# AND THE TABLE MUST DRAW. app.jsx compiling proves it is valid JavaScript, not that it
+# renders — the two are different failures and both have happened.
+echo "— the table renders —"
+rm -f /tmp/gk-render.cjs
+npx esbuild harness/render-check.jsx --bundle --format=cjs --platform=node --outfile=/tmp/gk-render.cjs
+node /tmp/gk-render.cjs | sed 's/^/  /'

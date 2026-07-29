@@ -1,0 +1,11 @@
+# Generated, and not worth keeping. Everything here is rebuilt by ./harness/run-all.sh.
+node_modules/
+package-lock.json
+
+# the engine bundle the tests import, and the differential's accepted baseline
+harness/new.cjs
+harness/ref.cjs
+
+# scratch copies
+*.bak
+*.bak*

@@ -30,12 +30,14 @@ levant/
 build-game.js      engine.js + app.jsx  →  levant-prototype-v25.jsx
 
 harness/
-  run-all.sh       everything: build, differential, nine suites, both renders
+  run-all.sh       everything: build, differential, ten suites, both sources, both renders
   rebuild-bench.sh corpus pipeline end to end
   inject.sh        build the orders-bench artifact
 
   engine/          "does the game still work?"
-    test-*.js      nine suites, ~110 assertions
+    test-*.js      ten suites, ~115 assertions
+    test-view.js   "does the table have a second opinion?" — every option the table can
+                   click is a command the engine offers, over 50k states
     drive.js       plays a seeded game, prints a fingerprint
     diff.sh        replays 10 seeds against ref.cjs — a pure refactor must be identical
     check.sh       bundle + differential, quickly
@@ -112,13 +114,29 @@ nothing moves under the hand:
 actor · errand · standing · detail · commit · notice · turn
 ```
 
-Panels are `choices` · `facts` · `sides` · `notice` · `note`. Options carry facts, never
-appearance: `state` (chosen · available · idle · blocked), `category`, `why`, `rank`,
+Panels are `choices` · `facts` · `sides` · `notice` · `note` · `map`. Options carry facts,
+never appearance: `state` (chosen · available · idle · blocked), `category`, `why`, `rank`,
 `subject`. A panel carries `pick` — what its options are *to each other*: `one` · `many` ·
 `repeat` · `act`. **A blocked option has `cmd: null`** and is structurally undispatchable.
 
-The table's remaining reach into the engine is **two calls**: `legalTargets` for the map, and
-`progressLine` for the scribe's prompt.
+`map` is the sixth kind and the only one that is not a list. A province is drawn once and may
+host several options at once, so it gets the same option objects **indexed by place** —
+`regions[rid].options`, `regions[rid].slots[i]`, and a `subject` of facts (who holds it, at
+what rung, whether it is coastal). Coordinates are *not* in it: `REG` holds `x`/`y` because
+where Ugarit sits relative to Byblos is a fact about the world, like which regions border it.
+The table owns the transform — pan, zoom, pixels, colour — and nothing else.
+
+> The map used to ask `legalTargets` directly, and that was the same recurring bug seen from
+> the other side. `legalTargets` does not know every gate in front of a command: once all had
+> passed the only thing on offer was the reckoning, and the board still lit every activatable
+> building — 322 such states in 50,178. No rule broke (the gate refused the click and the
+> world did not move), but **the interface and the engine disagreed about what the rules
+> said**. The map now reads the same `availableCommands` walk the panels read, so they cannot
+> drift. If two things answer "what may be done here", one of them is wrong eventually.
+
+The table's remaining reach into the engine is **one call**: `progressLine`, for the scribe's
+prompt. `check-chain.js` asserts `app.jsx` builds no command, branches on no command type,
+and calls neither `legalTargets` nor `rank` nor `isCoastal`.
 
 **4. Two digests, two questions.**
 
@@ -160,6 +178,13 @@ not the artifact. All three are now guarded, and the guards are worth keeping:
 - a **duplicate declaration** from concatenating two sources — caught by compiling the built
   file, which is what the smoke render does.
 - a **stray import** surviving the assembly — `build-game.js` refuses to write.
+
+A fourth was found the other way round: **the source was broken and the artifact was fine.**
+`app.jsx` imported `view` twice — not valid JavaScript — and nothing noticed, because
+`build-game.js` strips the import block before it concatenates. Every check downstream ran on
+the built file and passed. `run-all.sh` now compiles **both sources on their own** as well.
+The general form: *a guard that only ever looks at the build output cannot see a fault in
+what the build throws away.*
 
 And: **do not publish `levant/app.jsx` or `levant/engine.js` as artifacts.** They are sources
 and import each other; only the built files run.

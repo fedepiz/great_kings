@@ -77,6 +77,45 @@ const engineCases = new Set([...read(path.join("..", "..", "levant-prototype-v25
 const orphan = [...cmdTypes].filter((t) => !engineCases.has(t) && t !== "verb");
 ok(orphan.length === 0, "every command the corpus uses still exists in the engine", orphan.join(", "));
 
+console.log("\n— the table names no command types —");
+// THE ACCEPTANCE TEST FOR `view`. If the table can write a command, it knows something about
+// the rules, and a rule can then live in whether a panel happens to draw a button — which is
+// how every UI-enforced rule in this project got in. The table's job is to draw what `view`
+// says and ship back the `cmd` attached to whatever was clicked, verbatim.
+//
+// This passed only once the map was drawn from `view`. Before that, one site survived:
+// the province click, which built { t: "region", rid } itself.
+{
+  const appText = fs.readFileSync(appSrc, "utf8");
+  const named = [...appText.matchAll(/\bt: *"(\w+)"/g)].map((m) => m[1]).filter((t) => engineCases.has(t));
+  ok(named.length === 0, "app.jsx builds no command of its own", [...new Set(named)].join(", "));
+  const reads = [...appText.matchAll(/\.t *===? *"(\w+)"/g)].map((m) => m[1]).filter((t) => engineCases.has(t));
+  ok(reads.length === 0, "app.jsx branches on no command type", [...new Set(reads)].join(", "));
+  // The third shape: a SET of types tested against .t — `["forfeit","pass"].includes(c.t)`,
+  // which neither regex above catches.
+  //
+  // A blunt scan for any command type appearing as a string does NOT work here, and the
+  // reason is worth writing down: panel kinds and command types are both English words drawn
+  // from one namespace, and they collide. `note` is a real command ({t:"note"} writes a
+  // chronicle line) AND a real panel kind, so `pan.kind === "note"` looks exactly like the
+  // table naming a command and is nothing of the sort. Only a string tested against `.t`
+  // means what this check is looking for.
+  //
+  // Exactly two are allowed, and they are the SCRIBE's, not the table's: the desk does not
+  // offer a model the two ways to end a turn without acting. That withholds nothing from the
+  // player and enforces nothing on the engine — both stay on the menu, and the buttons that
+  // send them are drawn from `view` like everything else.
+  const SCRIBE_EXCLUDES = ["forfeit", "pass"];
+  const inSets = [...appText.matchAll(/\[([^\]]*)\]\.includes\( *\w+\.t *\)/g)]
+    .flatMap((m) => [...m[1].matchAll(/"(\w+)"/g)].map((x) => x[1]));
+  const surprise = [...new Set(inSets)].filter((t) => !SCRIBE_EXCLUDES.includes(t));
+  ok(surprise.length === 0, `the only command types tested against are the scribe's own exclusions (${SCRIBE_EXCLUDES.join(", ")})`,
+     "unexpected: " + surprise.join(", "));
+  // the map's old private routes into the rules. `view` answers both now.
+  for (const fn of ["legalTargets", "isCoastal", "rank"])
+    ok(!new RegExp("\\b" + fn + "\\s*\\(").test(appText), `app.jsx does not call ${fn} — the map reads the view`);
+}
+
 console.log("\n— the pack was rendered from THIS corpus —");
 const pack = JSON.parse(read("orders-pack.json"));
 ok(pack.cases.length === corpus.cases.length, `case count matches (${pack.cases.length} vs ${corpus.cases.length})`);

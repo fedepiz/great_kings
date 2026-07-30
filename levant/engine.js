@@ -19,72 +19,87 @@
 //  at 10/10 differential seeds unless you meant to change the rules.
 // =====================================================================
 
-const REG = [
-  // --- Greece & the Balkan hinterland ---
-  { id: "ISTR", n: "Ister", x: 70, y: 110, f: 0, wild: 1, slots: [{}, {}] },
-  { id: "IOL", n: "Iolkos", x: 70, y: 200, f: 1, slots: [{ c: 1 }, { res: "clay" }, {}] },
-  { id: "MYC", n: "Mycenae", x: 40, y: 290, f: 1, slots: [{ c: 1 }, { res: "clay" }, {}, {}] },
-  // --- Anatolia ---
-  { id: "KAS", n: "Kaska", x: 370, y: 20, f: 0, wild: 1, slots: [{}, {}, {}] },
-  { id: "WIL", n: "Wilusa", x: 200, y: 110, f: 1, slots: [{ c: 1 }, {}, {}] },
-  { id: "HAT", n: "Hattusa", x: 360, y: 110, f: 1, slots: [{}, {}, {}, {}] },
-  { id: "ISU", n: "Isuwa", x: 540, y: 110, f: 1, slots: [{ res: "copper" }, {}, {}] },
-  { id: "ARZ", n: "Arzawa", x: 200, y: 200, f: 2, slots: [{ c: 1 }, {}, {}] },
-  { id: "PLA", n: "Tarhuntassa", x: 360, y: 200, f: 1, slots: [{ res: "copper" }, {}, {}] },
-  { id: "MIL", n: "Millawanda", x: 200, y: 290, f: 1, slots: [{ c: 1 }, { res: "clay" }, {}] },
-  { id: "LUK", n: "Lukka", x: 320, y: 290, f: 0, wild: 1, sea: 1, slots: [{ c: 1 }, {}] },
-  { id: "KIZ", n: "Kizzuwatna", x: 450, y: 290, f: 2, slots: [{ c: 1 }, {}, {}] },
-  // --- Upper Mesopotamia ---
-  { id: "WAS", n: "Washukanni", x: 700, y: 110, f: 2, slots: [{}, {}, {}, {}] },
-  { id: "CAR", n: "Carchemish", x: 600, y: 200, f: 2, slots: [{}, {}, {}] },
-  { id: "ASH", n: "Ashur", x: 740, y: 200, f: 2, slots: [{}, {}, {}] },
-  { id: "HAL", n: "Halab", x: 600, y: 290, f: 2, slots: [{ res: "cloth" }, {}, {}] },
-  { id: "MAR", n: "Mari", x: 750, y: 290, f: 1, slots: [{}, {}, {}] },
-  // --- islands in the water ---
-  { id: "KNO", n: "Knossos", x: 80, y: 400, f: 1, slots: [{ c: 1 }, { res: "clay" }, {}] },
-  { id: "ALA", n: "Alashiya", x: 290, y: 380, f: 1, slots: [{ res: "copper" }, { c: 1 }, { res: "copper" }] },
-  { id: "SHK", n: "Sherden", x: 90, y: 550, f: 0, wild: 1, sea: 1, slots: [{ c: 1 }, { c: 1 }] },
-  // --- the Levant: coast road, inland road, desert ---
-  { id: "UGA", n: "Ugarit", x: 450, y: 380, f: 1, slots: [{ c: 1 }, { res: "cloth" }, {}] },
-  { id: "AMU", n: "Amurru", x: 610, y: 380, f: 2, slots: [{}, {}, {}] },
-  { id: "SUT", n: "Sutu", x: 750, y: 380, f: 0, wild: 1, slots: [{}, {}] },
-  { id: "BYB", n: "Byblos", x: 450, y: 470, f: 1, slots: [{ c: 1 }, { res: "cloth" }, {}] },
-  { id: "QAD", n: "Qadesh", x: 610, y: 470, f: 2, slots: [{}, {}, {}] },
-  { id: "BAB", n: "Babylon", x: 740, y: 470, f: 3, slots: [{}, {}, {}, {}] },
-  { id: "CAN", n: "Canaan", x: 440, y: 590, f: 2, slots: [{ c: 1 }, {}, { res: "cloth" }, {}] },
-  { id: "APR", n: "Apiru", x: 610, y: 560, f: 0, wild: 1, slots: [{}, {}] },
-  { id: "NIP", n: "Nippur", x: 740, y: 560, f: 3, slots: [{}, {}, {}, { res: "clay" }] },
-  { id: "DER", n: "Der", x: 900, y: 560, f: 1, slots: [{}, {}] },
-  { id: "SIN", n: "Sinai", x: 475, y: 680, f: 0, slots: [{ res: "copper" }, {}] },
-  { id: "SHA", n: "Shasu", x: 610, y: 650, f: 0, wild: 1, slots: [{}, {}] },
-  // --- Egypt ---
-  { id: "LIB", n: "Libu", x: 90, y: 700, f: 0, wild: 1, slots: [{}, {}] },
-  { id: "LEG", n: "Lower Egypt", x: 260, y: 700, f: 3, slots: [{ c: 1 }, { c: 1 }, {}, {}, {}] },
-  { id: "MEG", n: "Middle Egypt", x: 230, y: 800, f: 3, slots: [{}, {}, {}] },
-  { id: "UEG", n: "Upper Egypt", x: 360, y: 800, f: 2, slots: [{}, {}, {}] },
-];
-const R = Object.fromEntries(REG.map((r) => [r.id, r]));
-const NB = [
-  // Greece
-  ["ISTR", "IOL"], ["IOL", "MYC"],
-  // Anatolia
-  ["KAS", "HAT"], ["KAS", "ISU"], ["HAT", "ISU"], ["HAT", "PLA"],
-  ["WIL", "ARZ"], ["ARZ", "MIL"], ["ARZ", "PLA"], ["MIL", "LUK"], ["LUK", "PLA"], ["PLA", "KIZ"],
-  // Upper Mesopotamia & the desert caravan
-  ["ISU", "WAS"], ["WAS", "CAR"], ["WAS", "ASH"], ["CAR", "HAL"], ["ASH", "MAR"], ["MAR", "SUT"], ["SUT", "QAD"],
-  // the Levant: coast road, inland road
-  ["KIZ", "UGA"], ["KIZ", "HAL"], ["HAL", "AMU"], ["UGA", "AMU"], ["UGA", "BYB"],
-  ["AMU", "QAD"], ["QAD", "APR"], ["APR", "BYB"], ["APR", "SHA"], ["APR", "NIP"], ["BYB", "CAN"],
-  ["CAN", "SIN"], ["SHA", "SIN"],
-  // Mesopotamia
-  ["QAD", "BAB"], ["BAB", "NIP"], ["BAB", "DER"],
-  // Egypt
-  ["CAN", "LEG"], ["SIN", "LEG"], ["LEG", "MEG"], ["MEG", "UEG"], ["LIB", "LEG"],
-];
-const ADJ = {};
-NB.forEach(([a, b]) => { (ADJ[a] = ADJ[a] || []).push(b); (ADJ[b] = ADJ[b] || []).push(a); });
-function rdist(a, b) {
+import CANON from "./scenario.js";
+
+// ============================ THE WORLD IS SCENARIO DATA ============================
+// The map and the cast are not constants of the engine: they arrive as a SCENARIO —
+// levant/scenario.js is the canon — and live on the state as `g.world`. `worldFrom` is the
+// ONE compile from the author's vocabulary into the engine's, run once at initState; there is
+// no module-level world at all. Every reader takes the world off the state it was given —
+// `const { R, PNAME } = g.world` — so two games may stand on two different boards.
+//
+// `g.world` IS IMMUTABLE AFTER initState. Nothing may write it, ever — it is the stage, not
+// the position. The fingerprint ignores it for exactly that reason (see NOT_THE_POSITION),
+// and the derived indexes below stay truthful only while nothing writes what they index.
+function worldFrom(sc) {
+  const REG = sc.regions.map((r) => ({
+    id: r.id, n: r.name, x: r.at[0], y: r.at[1], f: r.farm,
+    ...(r.wild ? { wild: 1 } : null), ...(r.seafaring ? { sea: 1 } : null),
+    slots: r.slots.map((s) => ({ ...(s.coast ? { c: 1 } : null), ...(s.res ? { res: s.res } : null) })),
+  }));
+  const HOME = {}, PNAME = {}, PCOL = {};
+  for (const p of sc.powers) { HOME[p.id] = p.home; PNAME[p.id] = p.name; PCOL[p.id] = p.color; }
+  // the derived indexes ride along: functions of the data above, built once here, never written
+  const R = Object.fromEntries(REG.map((r) => [r.id, r]));
+  const NB = sc.roads.map(([a, b]) => [a, b]);
+  const ADJ = {};
+  for (const [a, b] of NB) { (ADJ[a] = ADJ[a] || []).push(b); (ADJ[b] = ADJ[b] || []).push(a); }
+  const COASTAL = REG.filter((r) => r.slots.some((s) => s.c)).map((r) => r.id);
+  return { REG, R, NB, ADJ, COASTAL, PLAYERS: sc.powers.map((p) => p.id), HOME, PNAME, PCOL };
+}
+// A scenario is authored by a person, so the loader VALIDATES OR THROWS. This is the opposite
+// of `dispatch`'s politeness, on purpose: dispatch faces players and stale worlds, the loader
+// faces an author, and a misauthored scenario seated silently is a broken world at birth.
+function validateScenario(sc) {
+  const bad = (m) => { throw new Error("scenario: " + m); };
+  if (!sc || !Array.isArray(sc.powers) || !sc.powers.length) bad("powers are required");
+  if (!Array.isArray(sc.regions) || !sc.regions.length) bad("regions are required");
+  const rids = new Set(sc.regions.map((r) => r.id));
+  const pids = new Set(sc.powers.map((p) => p.id));
+  if (rids.size !== sc.regions.length) bad("region ids collide");
+  if (pids.size !== sc.powers.length) bad("power ids collide");
+  // the ownership encoding leans on this: a work's owner field holds a power id OR its own
+  // region's id, and the two namespaces must never meet — see `usable`
+  for (const p of sc.powers) if (rids.has(p.id)) bad(`power id ${p.id} collides with a region id`);
+  const crowns = {};
+  for (const r of sc.regions)
+    for (const s of r.slots || []) {
+      if (!s.work) continue;
+      const t = s.work.type;
+      if (!BT[t]) bad(`${r.id} holds an unknown building type "${t}"`);
+      const organ = t === "palace" || BT[t].annex;
+      if (s.work.crown && !pids.has(s.work.crown)) bad(`${r.id}: crown "${s.work.crown}" is no power`);
+      if (s.work.crown && !organ) bad(`${r.id}: a ${t} is the province's own and takes no crown`);
+      if (organ && !s.work.crown && !(t === "warrior" && r.wild)) bad(`${r.id}: a ${t} is an organ of state and needs a crown`);
+      if (t === "palace") {
+        if (crowns[s.work.crown]) bad(`two palaces for ${s.work.crown}`);
+        crowns[s.work.crown] = r.id;
+      }
+    }
+  for (const p of sc.powers) {
+    if (!rids.has(p.home)) bad(`${p.id}'s home ${p.home} is no region`);
+    if (sc.regions.find((r) => r.id === p.home).wild) bad(`${p.id}'s home ${p.home} is wild`);
+    if (crowns[p.id] !== p.home) bad(`${p.id}'s palace stands at ${crowns[p.id] || "nowhere"}, not its home ${p.home}`);
+  }
+  for (const [a, b] of sc.roads || []) if (!rids.has(a) || !rids.has(b)) bad(`road ${a}–${b} leaves the map`);
+  const homes = new Set(sc.powers.map((p) => p.home));
+  for (const [q, m] of Object.entries(sc.standings || {})) {
+    if (!pids.has(q)) bad(`standings name an unknown power ${q}`);
+    for (const [rid, v] of Object.entries(m)) {
+      if (!rids.has(rid)) bad(`${q} holds standing in unknown region ${rid}`);
+      if (homes.has(rid)) bad(`${q} holds standing in a capital (${rid}) — capitals carry no ledger`);
+      const rung = typeof v === "string" ? v : v.rung;
+      const inf = typeof v === "string" ? FLOOR[rung] : v.influence;
+      if (!(rung in FLOOR)) bad(`${q} in ${rid}: unknown rung "${rung}"`);
+      if (!(inf >= FLOOR[rung])) bad(`${q} in ${rid}: influence ${inf} is below the ${rung} floor ${FLOOR[rung]}`);
+    }
+  }
+}
+// ===================================================================================
+
+function rdist(g, a, b) {
   if (a === b) return 0;
+  const { ADJ } = g.world;
   const seen = { [a]: 0 }; const q = [a];
   while (q.length) {
     const x = q.shift();
@@ -92,15 +107,11 @@ function rdist(a, b) {
   }
   return 99;
 }
-const isCoastal = (rid) => R[rid].slots.some((s) => s.c);
-const COASTAL = REG.filter((r) => isCoastal(r.id)).map((r) => r.id);
+const isCoastal = (g, rid) => g.world.R[rid].slots.some((s) => s.c);
 
-const PLAYERS = ["Y", "H", "M", "B", "E"]; // turn order, west to east
-const HOME = { E: "LEG", H: "HAT", M: "WAS", B: "BAB", Y: "MYC" };
-const PCOL = { E: "#C9A227", H: "#8C4A2F", M: "#6B4A8C", B: "#177268", Y: "#B01E3C" };
-const PNAME = { E: "Egypt", H: "Hatti", M: "Mitanni", B: "Babylon", Y: "Mycenae" };
-const live = (g) => PLAYERS.filter((q) => !g.out[q]);
+const live = (g) => g.world.PLAYERS.filter((q) => !g.out[q]);
 function nextPlayer(g, from) {
+  const { PLAYERS } = g.world;
   const i = PLAYERS.indexOf(from);
   for (let k = 1; k <= PLAYERS.length; k++) {
     const q = PLAYERS[(i + k) % PLAYERS.length];
@@ -148,86 +159,57 @@ const BT = {
 };
 
 
-function initState() {
+function initState(scenario = CANON) {
+  validateScenario(scenario);
+  const world = worldFrom(scenario);
+  const { REG, PLAYERS, HOME, PNAME } = world;
   const rel = {};
   const homes = PLAYERS.map((q) => HOME[q]);
   for (const q of PLAYERS) {
     rel[q] = {};
     for (const r of REG) if (!homes.includes(r.id)) rel[q][r.id] = { i: 0, s: "none" };
   }
-  const sub = (q, rid) => (rel[q][rid] = { i: 10, s: "subject" });
-  const frd = (q, rid) => (rel[q][rid] = { i: 2, s: "friend" });
-  sub("E", "MEG"); sub("E", "UEG"); frd("E", "BYB");
-  sub("H", "ISU"); sub("H", "PLA"); sub("H", "KIZ"); frd("H", "UGA");
-  sub("M", "HAL"); sub("M", "CAR"); frd("M", "ASH");
-  sub("B", "NIP"); sub("B", "DER"); frd("B", "MAR");
-  sub("Y", "KNO"); sub("Y", "IOL"); frd("Y", "MIL");
-  const band = (rid, n) => Array.from({ length: n }, () => ({ t: "warrior", o: rid }));
-  const pad = (rid, arr) => { const out = arr.slice(); while (out.length < R[rid].slots.length) out.push(null); return out; };
-  const B = {
-    // wild peoples
-    ISTR: band("ISTR", 2), KAS: band("KAS", 3), LUK: band("LUK", 2), SUT: band("SUT", 2),
-    APR: band("APR", 2), SHA: band("SHA", 2), LIB: band("LIB", 2), SHK: band("SHK", 2),
-    // Mycenae
-    MYC: [{ t: "port", o: "MYC" }, { t: "wsP", o: "MYC" }, { t: "palace", o: "Y" }, { t: "farm", o: "MYC" }],
-    KNO: [{ t: "port", o: "KNO" }, { t: "wsP", o: "KNO" }, null],
-    IOL: [{ t: "port", o: "IOL" }, null, { t: "farm", o: "IOL" }],
-    // Hatti
-    HAT: [{ t: "palace", o: "H" }, { t: "farm", o: "HAT" }, { t: "garrison", o: "HAT" }, null],
-    ISU: [{ t: "wsB", o: "ISU" }, null, null],
-    PLA: [{ t: "wsB", o: "PLA" }, { t: "farm", o: "PLA" }, { t: "market", o: "PLA" }],
-    KIZ: [{ t: "port", o: "KIZ" }, { t: "farm", o: "KIZ" }, null],
-    // Mitanni
-    WAS: [{ t: "palace", o: "M" }, { t: "farm", o: "WAS" }, { t: "garrison", o: "WAS" }, null],
-    HAL: [{ t: "wsC", o: "HAL" }, { t: "farm", o: "HAL" }, { t: "market", o: "HAL" }],
-    CAR: [{ t: "farm", o: "CAR" }, { t: "market", o: "CAR" }, null],
-    // Babylon
-    BAB: [{ t: "palace", o: "B" }, { t: "farm", o: "BAB" }, { t: "market", o: "BAB" }, null],
-    NIP: [{ t: "farm", o: "NIP" }, { t: "granary", o: "NIP" }, null, { t: "wsP", o: "NIP" }],
-    DER: [{ t: "farm", o: "DER" }, null],
-    // Egypt
-    LEG: [{ t: "port", o: "LEG" }, null, { t: "palace", o: "E" }, { t: "farm", o: "LEG" }, null],
-    MEG: [{ t: "farm", o: "MEG" }, { t: "granary", o: "MEG" }, null],
-    UEG: [{ t: "farm", o: "UEG" }, { t: "market", o: "UEG" }, null],
-    // independents
-    ALA: [{ t: "wsB", o: "ALA" }, { t: "port", o: "ALA" }, { t: "wsB", o: "ALA" }],
-    UGA: [{ t: "port", o: "UGA" }, { t: "wsC", o: "UGA" }, { t: "farm", o: "UGA" }],
-    BYB: [{ t: "port", o: "BYB" }, { t: "wsC", o: "BYB" }, { t: "farm", o: "BYB" }],
-    AMU: [{ t: "garrison", o: "AMU" }, null, null],
-    QAD: [{ t: "garrison", o: "QAD" }, { t: "farm", o: "QAD" }],
-    CAN: [{ t: "garrison", o: "CAN" }, { t: "farm", o: "CAN" }, null, null],
-    ASH: [{ t: "garrison", o: "ASH" }, { t: "farm", o: "ASH" }, null],
-    MAR: [{ t: "market", o: "MAR" }, { t: "farm", o: "MAR" }],
-    ARZ: [{ t: "garrison", o: "ARZ" }, { t: "farm", o: "ARZ" }, null],
-    WIL: [{ t: "port", o: "WIL" }, { t: "garrison", o: "WIL" }],
-    MIL: [{ t: "port", o: "MIL" }, null, { t: "market", o: "MIL" }],
-    SIN: [null, null],
-  };
+  for (const [q, m] of Object.entries(scenario.standings || {}))
+    for (const [rid, v] of Object.entries(m)) {
+      rel[q][rid] = typeof v === "string" ? { i: FLOOR[v], s: v } : { i: v.influence, s: v.rung };
+      if (typeof v === "object" && v.strained) rel[q][rid].strained = true;
+    }
+  // a slot's work becomes a standing building. The owner ENCODING is decided here and nowhere
+  // else: a crown letter for an organ of state, the region's own id for everything else — the
+  // scenario says it in domain terms (`crown`), and the encoding never crosses back out.
   const b = {};
-  for (const r of REG) b[r.id] = pad(r.id, B[r.id] || []);
+  for (const r of scenario.regions)
+    b[r.id] = r.slots.map((s) => {
+      if (!s.work) return null;
+      const bd = { t: s.work.type, o: s.work.crown || r.id };
+      if (s.work.tapped) bd.tap = true;
+      return bd;
+    });
   const players = {}, passed = {}, out = {}, spent = {};
-  for (const q of PLAYERS) {
-    players[q] = { stock: { food: 2, bronze: 0, cloth: 0, pottery: 0 } };
-    passed[q] = false; out[q] = false; spent[q] = {};
+  for (const p of scenario.powers) {
+    players[p.id] = { stock: { food: 0, bronze: 0, cloth: 0, pottery: 0, ...p.stock } };
+    passed[p.id] = false; out[p.id] = false; spent[p.id] = {};
   }
-  players.H.stock.bronze = 1;
-  players.Y.stock.pottery = 1;
-  players.M.stock.cloth = 1;
+  const year = scenario.year || 1;
   return {
-    round: 1,
+    // THE STAGE, NOT THE POSITION — immutable from this line on. Nothing may ever write to
+    // `g.world` or anything inside it; a different world is a different initState. The
+    // fingerprint ignores it (see NOT_THE_POSITION), which is only sound while this holds.
+    world,
+    round: year,
     turn: PLAYERS[0],
     passed, out, rel, b, players, spent,
     act: null, mode: null, shortfall: null,
     chain: "00000000",                     // running hash of the command stream: see THE CHAIN
     step: 0,                               // interaction-step counter: see THE STEP
     rot: 1,
-    log: [`Year 1. ${PNAME[PLAYERS[0]]} to act. (Everyone's disposition is Soft for now.)`],
+    log: [`Year ${year}. ${PNAME[PLAYERS[0]]} to act. (Everyone's disposition is Soft for now.)`],
   };
 }
 
 // ---- relation helpers ----
 function rank(g, p, rid) {
-  if (rid === HOME[p]) return 4;
+  if (rid === g.world.HOME[p]) return 4;
   const rr = g.rel[p][rid];
   return rr ? RANK[rr.s] : 0;
 }
@@ -256,7 +238,7 @@ function foremostIn(g, rid, except) {
 function usable(g, p, rid, bd) {
   if (!bd) return false;
   if (isCrown(bd)) return bd.o === p;
-  return rid === HOME[p] || rank(g, p, rid) >= 3;
+  return rid === g.world.HOME[p] || rank(g, p, rid) >= 3;
 }
 const readyB = (bd) => bd && !bd.tap;
 // hasBuilding asks whether one is STANDING THERE AT ALL, not whether it has acted — a tapped
@@ -275,6 +257,7 @@ function hasBuilding(g, rid, t) { return (g.b[rid] || []).some((bd) => bd && bd.
 // road and an envoy's route — cargo and soldiers walk, letters sail. Keeping them as
 // arguments makes that a statement rather than an accident.
 function reach(g, p, start, maxd, opts) {
+  const { ADJ, COASTAL } = g.world;
   const bySea = !!(opts && opts.bySea), withStart = !!(opts && opts.withStart);
   const seen = { [start]: 0 }; const q = [start];
   while (q.length) {
@@ -282,7 +265,7 @@ function reach(g, p, start, maxd, opts) {
     if (seen[x] >= maxd) continue;
     if (!(x === start || rank(g, p, x) >= 1)) continue;
     const nbs = [...(ADJ[x] || [])];
-    if (bySea && isCoastal(x) && hasBuilding(g, x, "port")) for (const y of COASTAL) if (y !== x) nbs.push(y);
+    if (bySea && isCoastal(g, x) && hasBuilding(g, x, "port")) for (const y of COASTAL) if (y !== x) nbs.push(y);
     for (const y of nbs) if (!(y in seen)) { seen[y] = seen[x] + 1; q.push(y); }
   }
   const out = new Set(Object.keys(seen));
@@ -294,7 +277,7 @@ function overland(g, p, start, maxd) { return reach(g, p, start, maxd, { withSta
 // A port carries ONE thing across the water per tap: one cargo, or one warrior.
 function portIn(g, rid) { return (g.b[rid] || []).findIndex((bd) => bd && bd.t === "port" && readyB(bd)); }
 function overseasPorts(g, exceptRid) {
-  return REG.filter((r) => r.id !== exceptRid && isCoastal(r.id) && hasBuilding(g, r.id, "port")).map((r) => r.id);
+  return g.world.REG.filter((r) => r.id !== exceptRid && isCoastal(g, r.id) && hasBuilding(g, r.id, "port")).map((r) => r.id);
 }
 // ============================ THE ACTIONS TABLE ============================
 // Every verb declares its range and its cost HERE. Ranges are per-actor; costs are specs
@@ -308,6 +291,7 @@ const ACTIONS = {
     // may be seated anywhere inside your own writ, but only by the king's own hand
     targets: (g, p, m, out) => {
       if (m.region) return out;                       // the region is chosen; the type comes next
+      const { REG, HOME } = g.world;
       const bR = overland(g, p, g.act.palace, ACTIONS.build.range(g, g.act));
       const seatAnywhere = ACTIONS.build.seatRange(g, g.act) === Infinity && !g.act.steward;
       for (const r of REG) {
@@ -323,19 +307,20 @@ const ACTIONS = {
     commit: (g, p, rid) => { g.mode = { v: "build", region: rid }; },
   },
   tax: {
-    range: (g, act) => (act.steward || act.palace === HOME[g.turn] ? 1 : 0),
+    range: (g, act) => (act.steward || act.palace === g.world.HOME[g.turn] ? 1 : 0),
     cost: null,
     // one province of your own writ, within the levy's short reach
     targets: (g, p, m, out) => {
       const range = ACTIONS.tax.range(g, g.act);
       for (const rid of Object.keys(g.b))
-        if (rdist(g.act.palace, rid) <= range
+        if (rdist(g, g.act.palace, rid) <= range
             && g.b[rid].some((bd, i) => readyB(bd) && usable(g, p, rid, bd) && yieldOf(g, rid, i)))
           out.regions.add(rid);
       return out;
     },
     // the levy sweeps every untapped producer there at once
     commit: (g, p, rid) => {
+      const { R, PNAME } = g.world;
       const takes = works(g, (bd, r, i) => r === rid && readyB(bd) && usable(g, p, r, bd) && yieldOf(g, r, i))
         .map((e) => { g.b[e[0]][e[1]].tap = true; return yieldOf(g, e[0], e[1]); });
       g.log.unshift(`${PNAME[p]} sends the levy through ${R[rid].n}: every untapped producer is swept.`);
@@ -362,6 +347,7 @@ const ACTIONS = {
     range: () => 3, cost: null,
     // the climb: the floor met, and no incumbent standing higher
     targets: (g, p, m, out) => {
+      const { R } = g.world;
       for (const rid of diploReach(g, p, g.act.palace, ACTIONS.treaty.range(g, g.act))) {
         const rr = g.rel[p][rid]; if (!rr) continue;
         const higher = (min) => others(g, p)
@@ -380,6 +366,7 @@ const ACTIONS = {
       return out;
     },
     commit: (g, p, rid) => {
+      const { R, PNAME } = g.world;
       const rr = g.rel[p][rid];
       if (rr.s === "friend") {
         for (const q of others(g, p)) if (RANK[g.rel[q][rid].s] >= 2) {
@@ -411,6 +398,7 @@ const ACTIONS = {
     },
     // the command buys the opportunity, not the outcome
     commit: (g, p, rid) => {
+      const { R, PNAME, PLAYERS } = g.world;
       const order = live(g).filter((q) => infOf(g, q, rid) > 0)
         .sort((a, b) => (infOf(g, a, rid) - infOf(g, b, rid)) || (PLAYERS.indexOf(a) - PLAYERS.indexOf(b)));
       const party = {}; for (const q of order) party[q] = q;
@@ -447,7 +435,7 @@ const ACTIONS = {
     // any ground holding something not yours, that your ready forces can actually reach
     targets: (g, p, m, out) => {
       const mode = m.v === "searaid" ? "sea" : "land";
-      for (const r of REG) {
+      for (const r of g.world.REG) {
         if (!g.b[r.id].some((bd) => bd && !usable(g, p, r.id, bd))) continue;
         if (eligibleAttackers(g, p, r.id, mode).length) out.regions.add(r.id);
       }
@@ -455,6 +443,7 @@ const ACTIONS = {
     },
     // the raid opens its contest; the assembly is refundable until the launch
     commit: (g, p, rid, m) => {
+      const { R, PNAME } = g.world;
       const mode = m.v === "searaid" ? "sea" : "land";
       g.raid = { t: rid, atk: [], defC: [], mode };
       contestOpen(g, "raid", rid, [p], { [p]: "atk" }, biddablePeoples(g).map((x) => x.pid), { opener: p, binding: false });
@@ -469,6 +458,7 @@ ACTIONS.remove = {
   range: () => 1, cost: null,
   // pull down a work within your own writ — anything but the palace itself
   targets: (g, p, m, out) => {
+    const { HOME } = g.world;
     for (const e of works(g, (bd, rid) => bd.t !== "palace" && usable(g, p, rid, bd)
         && (rank(g, p, rid) >= 3 || rid === HOME[p])))
       out.slots.add(e[0] + ":" + e[1]);
@@ -546,6 +536,7 @@ const specOf = (m) => ACTIONS[m.kind === "build" ? "build" : m.kind].cost;
 // where your writ runs (home or Subject). A single province sponsors the action; tap as many
 // of its producers as the bill takes. No mixing purse and taps in one action.
 function tapRegionsOf(g, p, actorRid) {
+  const { ADJ, HOME } = g.world;
   return [actorRid, ...(ADJ[actorRid] || [])].filter((rid) => rid === HOME[p] || rank(g, p, rid) >= 3);
 }
 function tapProducers(g, p, rid) {
@@ -584,7 +575,7 @@ function yieldOf(g, rid, i) {
   // TODO: vestigial fields — nothing ever writes `bd.capGoods`, so this branch is always 1.
   // Left in place because deleting it moves the fingerprint and wants its own commit. Do not
   // build on it: a per-building yield needs a rule, not just a field.
-  return { good: BT[bd.t].yields, n: BT[bd.t].byRegion ? R[rid].f : bd.capGoods || 1 };
+  return { good: BT[bd.t].yields, n: BT[bd.t].byRegion ? g.world.R[rid].f : bd.capGoods || 1 };
 }
 // WHAT WINTER TAKES — the food above the store that will spoil, reckoned AFTER the year's
 // upkeep is paid. A rule, not a forecast for a panel: the interface reports this number, it
@@ -607,7 +598,7 @@ function foodStore(g, p) {
 function gain(g, p, good, n, why) {
   let shelved = 0, queued = 0;
   g.players[p].stock[good] += n; shelved = n;   // nothing is turned away during the year
-  g.log.unshift(`${PNAME[p]} gains ${n} ${good}${why ? " (" + why + ")" : ""}${shelved ? ` — ${shelved} to the stores` : ""}${queued ? `; ${queued} finds no room — choose` : ""}.`);
+  g.log.unshift(`${g.world.PNAME[p]} gains ${n} ${good}${why ? " (" + why + ")" : ""}${shelved ? ` — ${shelved} to the stores` : ""}${queued ? `; ${queued} finds no room — choose` : ""}.`);
 }
 function myPalaces(g, p) { return works(g, (bd) => bd.t === "palace" && bd.o === p); }
 // every organ of state eats one; garrisons are militia and eat nothing
@@ -627,7 +618,7 @@ function works(g, pred) {
   return out;
 }
 const isCrown = (bd) => bd.t === "palace" || BT[bd.t].annex;   // an organ of state, not a province's work
-function capacityOf(g, p, rid) { return rid === HOME[p] ? 3 : 1; }
+function capacityOf(g, p, rid) { return rid === g.world.HOME[p] ? 3 : 1; }
 // THE YEAR'S LEDGER — which targets a power has already spent a once-per-year verb on.
 // One structure for every such verb: ACTIONS[v].oncePerYear declares the rule, these read it.
 function usedOn(g, p, verb, rid) { return (((g.spent[p] || {})[verb]) || []).includes(rid); }
@@ -675,6 +666,7 @@ function tradeSourcesExist(g, p, seat, isPort) {
   return false;
 }
 function activatable(g, p) {
+  const { HOME } = g.world;
   const out = [];
   for (const rid of Object.keys(g.b))
     (g.b[rid] || []).forEach((bd, i) => {
@@ -693,6 +685,7 @@ function activatable(g, p) {
   return out;
 }
 function beginActivation(g, rid, i) {
+  const { R, PLAYERS, PNAME } = g.world;
   const p = g.turn;
   const a = activatable(g, p).find((x) => x.rid === rid && x.i === i);
   if (!a) return;
@@ -791,6 +784,7 @@ function forfeit(g, p) {
   // The apparatus of state falls; the country remains. Palaces and organs are pulled down —
   // they are what influence paid for. Farms, workshops, markets, ports and garrisons were
   // always the province's own, and simply carry on.
+  const { PLAYERS, HOME, PNAME } = g.world;
   const fallen = works(g, (bd) => bd.o === p && isCrown(bd));
   for (const e of fallen) g.b[e[0]][e[1]] = null;
   const razed = fallen.length;
@@ -1070,7 +1064,9 @@ const Order = { read: orderRead, allows: orderAllows, mark: orderMark, commands:
 // here, levy here — so the map cannot consume a flat list of choices. It gets the same facts
 // keyed by region:
 //
-//   regions: { NIP: { options[], slots: { 0: options[] }, works[], relations[], subject: {…} }, … }
+//   regions: { NIP: { name, at, farm, options[], slots: { 0: options[] }, works[], relations[], subject: {…} }, … }
+//
+// and `connections`, the roads, as pairs of region ids.
 //
 // `options` and `slots` are what may be DONE here. `works`, `relations` and `subject` are what
 // IS here — one entry per slot for what is built, one per power for who stands where, and the
@@ -1082,10 +1078,13 @@ const Order = { read: orderRead, allows: orderAllows, mark: orderMark, commands:
 // `why`, exactly as a blocked sponsor is.
 //
 // `subject` carries FACTS, never appearance: who holds the province, at what rung, whether it
-// is coastal. `PCOL[holder]` is the table's reading of that, and belongs to the table. What
-// the map does NOT carry is where a province sits: `REG` holds x/y because that is a fact
-// about the world, like which regions border it. The table owns the transform — pan, zoom,
-// pixels, colour — and nothing else.
+// is coastal. A CAPITAL IS HOME, never a holder — `home` is set and `holder` is null there.
+// The map also carries its own GEOGRAPHY — each region's `name`, `at` and `farm`, the ground
+// on every slot, and `connections`, the roads as pairs of places — because the world is
+// scenario data and may differ from game to game: a table that imported it would draw the
+// canon under every scenario. Every power named anywhere in the view is named WITH its
+// colour, for the same reason. The table owns the transform — pan, zoom, pixels — and
+// nothing else.
 //
 // `cmd` on an option is the command to dispatch, verbatim. The table never builds one.
 // =====================================================================
@@ -1094,6 +1093,7 @@ const SHORTGOOD = { food: "food", bronze: "brz", cloth: "cloth", pottery: "pot" 
 // "a and b" reads better than "a, b" in a sentence meant for a person
 const andList = (a) => (a.length <= 1 ? (a[0] || "") : a.slice(0, -1).join(", ") + " and " + a[a.length - 1]);
 function view(g) {
+  const { R, REG, NB, PLAYERS, HOME, PNAME, PCOL } = g.world;
   const p = g.turn;
   const av = availableCommands(g);
   const only = (t) => av.filter((c) => c.t === t);
@@ -1217,30 +1217,35 @@ function view(g) {
           opt(c, R[rid].n, { category: "work", subject: { region: rid, slot: c.i } }));
       }
 
-      // WHOSE WRIT RUNS HERE. A home province is held by its king outright; otherwise the
-      // highest rung takes it, and an ally shows only where nobody holds it. These are the
-      // facts. That a subject province is drawn in its holder's colour, and an ally's in a
-      // dashed line, is the table's reading of them.
+      // WHOSE WRIT RUNS HERE. A CAPITAL IS HOME — its king is named in `home`, and no holder
+      // is reported, because a capital is nobody's subject. Elsewhere the highest rung takes
+      // the province, and an ally shows only where nobody holds it. These are the facts; that
+      // home and held ground are drawn in a king's colour, and an ally's in a dashed line, is
+      // the table's reading of them. Every power named here is named WITH its colour: the
+      // world is scenario data, so the palette is a fact of the game, not of the table.
       const home = PLAYERS.find((q) => HOME[q] === rid) || null;
-      const holder = home || live(g).find((q) => rank(g, q, rid) >= 3) || null;
-      const ally = holder ? null : live(g).find((q) => rank(g, q, rid) === 2) || null;
+      const holder = home ? null : live(g).find((q) => rank(g, q, rid) >= 3) || null;
+      const ally = home || holder ? null : live(g).find((q) => rank(g, q, rid) === 2) || null;
 
-      // WHAT STANDS HERE. One entry per slot, in slot order, so `works[i]` lines up with the
-      // ground `REG` describes at `slots[i]` — the engine pads g.b to slot count at initState,
-      // so the two are always the same length. An empty slot is `{ building: null }`.
+      // WHAT STANDS HERE. One entry per slot, in slot order: the GROUND (coast, a resource)
+      // and the work standing on it, in one row. An empty slot is `{ building: null }` plus
+      // its ground — empty ground is a fact, not a gap.
       //
       // `power` IS THE OWNING KING, OR NULL — this is where the `bd.o` overload is decoded and
       // stopped (see `usable`). Null means the owner is the containing province, which the
       // caller already knows: it asked for this region.
-      const works = (g.b[rid] || []).map((bd) => (!bd ? { building: null } : {
-        building: bd.t,
-        label: BT[bd.t].name,
-        power: PLAYERS.includes(bd.o) ? bd.o : null,
-        spent: !!bd.tap,
-      }));
+      const works = (g.b[rid] || []).map((bd, i) => {
+        const ground = r.slots[i] || {};
+        const gr = { ...(ground.c ? { coast: true } : null), ...(ground.res ? { res: ground.res } : null) };
+        if (!bd) return { building: null, ...gr };
+        const power = PLAYERS.includes(bd.o) ? bd.o : null;
+        return { building: bd.t, label: BT[bd.t].name, power, color: power ? PCOL[power] : null,
+                 spent: !!bd.tap, ...gr };
+      });
 
-      // WHO STANDS HERE, DIPLOMATICALLY. Facts only: the rung is named, not abbreviated, and
-      // `strained` is a flag rather than the "!" the table happens to draw.
+      // WHO STANDS HERE, DIPLOMATICALLY. Facts only: the rung is named, not abbreviated —
+      // `rungLetter` is the drawn abbreviation, supplied here for the same reason SHORTGOOD
+      // is — and `strained` is a flag rather than the "!" the table happens to draw.
       //
       // EMITTED FOR CAPITALS TOO, deliberately. A capital is not exempt from a rival holding
       // influence inside it, and reporting only "home" there would hide that. Whether to say
@@ -1249,17 +1254,24 @@ function view(g) {
       for (const q of live(g)) {
         const rr = g.rel[q] && g.rel[q][rid];
         if (rr && (rr.i > 0 || rr.s !== "none"))
-          relations.push({ power: q, influence: rr.i, rung: rr.s, strained: !!rr.strained });
+          relations.push({ power: q, name: PNAME[q], color: PCOL[q], influence: rr.i,
+                           rung: rr.s, rungLetter: SLETTER[rr.s], strained: !!rr.strained });
       }
 
-      regions[rid] = { options, slots, works, relations, subject: {
-        region: rid, home, holder, ally,
-        rank: holder ? rank(g, holder, rid) : 0,
-        coastal: isCoastal(rid), wild: !!r.wild,
+      regions[rid] = { name: r.n, at: [r.x, r.y], farm: r.f, options, slots, works, relations, subject: {
+        region: rid,
+        home, homeName: home ? PNAME[home] : null, homeColor: home ? PCOL[home] : null,
+        holder, holderColor: holder ? PCOL[holder] : null,
+        ally, allyColor: ally ? PCOL[ally] : null,
+        rank: holder ? rank(g, holder, rid) : null,
+        coastal: isCoastal(g, rid), wild: !!r.wild,
         acting: !!(g.act && g.act.palace === rid),
       } };
     }
-    panels.push({ kind: "map", band: "map", id: "map", regions });
+    // the roads, as pairs of places — each place's point is `at` on its own entry, and the
+    // table computes centres because a box's width is its own layout
+    panels.push({ kind: "map", band: "map", id: "map",
+      connections: NB.map(([a, b]) => [a, b]), regions });
   }
 
   // ---- what to raise, once the ground is chosen ----
@@ -1430,7 +1442,7 @@ function view(g) {
     ];
     if (!short && rots > 0) rows.push({ label: "winter", value: `${rots} food will rot (the store holds ${keep})`, warn: true });
     panels.push({ kind: "facts", band: "courts", id: "court:" + q, label: PNAME[q] + (g.out[q] ? " — fallen" : ""),
-      subject: { power: q, self: q === p, store: keep }, rows });
+      subject: { power: q, color: PCOL[q], self: q === p, store: keep }, rows });
   }
 
   // ---- a contest: two sides, and whatever may still be laid before them ----
@@ -1523,6 +1535,7 @@ function view(g) {
 
   return {
     seat: p,
+    seatColor: PCOL[p],
     effectiveSeat: effectiveSeat(g),
     round: g.round,
     chain: g.chain,          // stamp a command against the view it was chosen from
@@ -1575,14 +1588,17 @@ function advanceChain(chain, cmd) {
 // what makes it catch a stale command — and the fingerprint is route-INDEPENDENT, which is
 // what makes it recognise that two ways round arrived at the same board.
 //
-// EVERYTHING IN THE STATE IS THE WORLD, and stays serialised with it. NOT_THE_WORLD is the
-// only exception, and it holds exactly the fields that record HOW the world was reached rather
-// than where the pieces stand: `log` narrates it, `chain` digests the command stream, `step`
-// counts the interaction's boundaries. Including any of the three would make the fingerprint
-// route-dependent, which is the one thing it must not be.
+// EVERYTHING IN THE STATE IS THE POSITION, and stays serialised with it. NOT_THE_POSITION is
+// the only exception, and it holds exactly two kinds of field. Three record HOW the position
+// was reached rather than where the pieces stand — `log` narrates it, `chain` digests the
+// command stream, `step` counts the interaction's boundaries — and including any of them would
+// make the fingerprint route-dependent, which is the one thing it must not be. The fourth is
+// `world`, the stage itself: immutable within a game, so hashing it distinguishes nothing the
+// position does not already say. Two positions on DIFFERENT stages therefore compare by their
+// scenarios, not here — the fingerprint answers "same position?" given the world.
 //
 // The exclusion lives HERE, in one list, and nowhere else — so a field added tomorrow is part
-// of the world unless somebody deliberately says otherwise. That is the safe default: an
+// of the position unless somebody deliberately says otherwise. That is the safe default: an
 // over-sensitive fingerprint is noisy and obvious, an under-sensitive one quietly reports that
 // two different boards are the same. The claim is checked, not asserted —
 // harness/engine/test-hash.js wipes the excluded fields across thousands of states and confirms
@@ -1594,7 +1610,7 @@ function advanceChain(chain, cmd) {
 // the scratch is cleared. Sorting them here would be wrong: other arrays in the state are
 // genuine sequences (a contest's bidding order is not a set). So the fingerprint is exact
 // at ACTION BOUNDARIES, which is where every user of it compares.
-const NOT_THE_WORLD = ["log", "chain", "step"];
+const NOT_THE_POSITION = ["log", "chain", "step", "world"];
 // TODO: an empty container is not the absence of one — an emptied basket keeps its key, so two
 // routes to the same world can fingerprint differently.
 function canonical(v) {
@@ -1603,7 +1619,7 @@ function canonical(v) {
   return "{" + Object.keys(v).sort().map((k) => JSON.stringify(k) + ":" + canonical(v[k])).join(",") + "}";
 }
 function fingerprint(g) {
-  const s = canonical(Object.fromEntries(Object.entries(g).filter(([k]) => !NOT_THE_WORLD.includes(k))));
+  const s = canonical(Object.fromEntries(Object.entries(g).filter(([k]) => !NOT_THE_POSITION.includes(k))));
   let x = 0x811c9dc5;
   for (let i = 0; i < s.length; i++) { x ^= s.charCodeAt(i); x = Math.imul(x, 0x01000193) >>> 0; }
   return x.toString(16).padStart(8, "0");
@@ -1638,6 +1654,7 @@ function ASSERT(ok, label, detail) {
 // Assert only what has been measured to hold across the harness's walks. An invariant that
 // needs a scope belongs at that boundary, not here with the scope written into its condition.
 function checkWorld(g, at) {
+  const { REG, PLAYERS } = g.world;
   for (const r of REG) {
     ASSERT(g.b[r.id].length === r.slots.length, "a province's works do not run parallel to its slots",
       { ...at, rid: r.id, works: g.b[r.id].length, slots: r.slots.length });
@@ -1672,7 +1689,7 @@ function contestGoods(g) {
 }
 function stockGoods(g) {
   let n = 0;
-  for (const q of PLAYERS) for (const t of GOODS) n += g.players[q].stock[t];
+  for (const q of g.world.PLAYERS) for (const t of GOODS) n += g.players[q].stock[t];
   return n;
 }
 
@@ -1751,6 +1768,7 @@ const stepKey = (g) => [
 ].join("|");
 // Everything below is the command itself. It never sees the stamp.
 function applyCommand(g, cmd) {
+  const { R, HOME, PNAME } = g.world;
   const p = g.turn;
   // Interrupts must be answered before anything else — the engine enforces what the UI implies.
   if (g.shortfall && cmd.t !== "perish") { g.log.unshift("Famine: abandonments must be chosen first."); return g; }
@@ -1880,6 +1898,7 @@ function validCmd(g, cmd) {
 // that has already walked the menu — `view`, writing a `why` onto every province out of
 // reach — passes its own rather than walking it again per region.
 function rejectReason(g, cmd, av) {
+  const { R } = g.world;
   const avail = av || availableCommands(g);
   const types = [...new Set(avail.map((c) => c.t))];
   if (cmd.t === "buildType" && g.mode && g.mode.region) {
@@ -1911,6 +1930,7 @@ function rejectReason(g, cmd, av) {
   return `not offered at this step; the current step offers: ${types.join(", ")}`;
 }
 function entreatRemark(g, p, rid, nGifts) {
+  const { R } = g.world;
   if (!nGifts) return null;
   const rr = g.rel[p][rid]; if (!rr) return null;
   const cur = rr.i, aft = cur + nGifts, st = rr.s;
@@ -1930,6 +1950,7 @@ function entreatRemark(g, p, rid, nGifts) {
   return `note: ${R[rid].n} is already your Subject at ${cur}; gifts here only offset the seat's hunger or bank garrison-call surplus${seatNote}.`;
 }
 function describeCmd(g, c) {
+  const { R, HOME, PNAME } = g.world;
   const nm = (rid) => (R[rid] && R[rid].n) || rid;
   switch (c.t) {
     case "activate": {
@@ -2159,7 +2180,7 @@ function menuOf(g) {
 }
 // ===============================================================================
 function endActivation(g) {
-  g.log.unshift(`${PNAME[g.turn]} ends the activation.`);
+  g.log.unshift(`${g.world.PNAME[g.turn]} ends the activation.`);
   g.act = null; g.mode = null;
   g.passed[g.turn] = false;
   g.turn = nextPlayer(g, g.turn);
@@ -2187,7 +2208,7 @@ function defenceStrength(g) {
 // LOWEST influence first — so the power with most at stake speaks last, seeing everything.
 // Ties fall to turn order. Each pays from its own stores; their strengths and their gift-baskets sum.
 function defendersOf(g, t, attacker) {
-  const order = PLAYERS;
+  const order = g.world.PLAYERS;
   return live(g)
     .filter((q) => q !== attacker && rank(g, q, t) >= 1)
     .sort((a, b) => (infOf(g, a, t) - infOf(g, b, t)) || (order.indexOf(a) - order.indexOf(b)));
@@ -2206,6 +2227,7 @@ function currentDefender(g) {
   return contestActor(g);
 }
 function launchRaid(g) {
+  const { R, PLAYERS, PNAME } = g.world;
   const p = g.turn;
   const t = g.raid.t;
   // the sword is drawn: courtship ends, win or lose
@@ -2234,6 +2256,7 @@ function launchRaid(g) {
   resolveRaid(g);
 }
 function autoMuster(g) {
+  const { PNAME } = g.world;
   const q = currentDefender(g); if (!q) return;
   const t = g.raid.t;
   const walls = fortressDef(g, g.turn, t);
@@ -2244,6 +2267,7 @@ function autoMuster(g) {
   g.log.unshift(`${PNAME[q]} musters what the hour requires — ${added} unit(s) tap and take the field; the defence stands at ${defenceStrength(g)}${walls ? ` (walls ${walls})` : ""} against ${need}.`);
 }
 function nextDefender(g) {
+  const { R, PNAME } = g.world;
   const c = g.contest;
   if (c && c.idx < c.turnOrder.length - 1) {
     c.idx++;
@@ -2254,6 +2278,7 @@ function nextDefender(g) {
   resolveRaid(g);
 }
 function resolveRaid(g) {
+  const { R, PNAME } = g.world;
   const p = g.turn;
   const t = g.raid.t;
   let A = raidStrength(g), D = defenceStrength(g);
@@ -2285,6 +2310,7 @@ function resolveRaid(g) {
   g.log.unshift(`${PNAME[p]} sweeps ${R[t].n}: ${A} against ${D} — ${strikes} strike(s) won. Choose what suffers.`);
 }
 function doStrike(g, t, i) {
+  const { R, PNAME } = g.world;
   const p = g.turn;
   const bd = g.b[t][i];
   if (!bd.tap) {
@@ -2306,7 +2332,7 @@ function doStrike(g, t, i) {
   if (g.raid.strikes <= 0 || hostilesIn(g, p, t).length === 0) endRaid(g);
 }
 function endRaid(g) {
-  g.log.unshift(`The raiders of ${PNAME[g.turn]} withdraw from ${R[g.raid.t].n}.`);
+  g.log.unshift(`The raiders of ${g.world.PNAME[g.turn]} withdraw from ${g.world.R[g.raid.t].n}.`);
   g.raid = null; g.contest = null; g.mode = null;
   spend(g);
 }
@@ -2314,6 +2340,7 @@ function endRaid(g) {
 
 function clickSlot(g, rid, i) {
   if (!g.act) { beginActivation(g, rid, i); return; }
+  const { R, PNAME } = g.world;
   const p = g.turn;
   const legal = legalTargets(g);
   if (!legal.slots.has(rid + ":" + i)) return;
@@ -2360,6 +2387,7 @@ function toggleSourceTap(g, rid, i) {
   m.taps.push([rid, i]);
 }
 function commitSourceTaps(g) {
+  const { R } = g.world;
   const p = g.turn; const m = g.mode;
   if (m.kind === "trade") m.flavor = "provision";
   const yields = { food: 0, bronze: 0, cloth: 0, pottery: 0 };
@@ -2389,17 +2417,18 @@ function sourceStockUnit(g, t) {
   m.flavor = "treasury";
   g.players[p].stock[t]--;
   m.paid.push(t);
-  g.log.unshift(`${PNAME[p]} pays 1 ${t} from the stockpile.`);
+  g.log.unshift(`${g.world.PNAME[p]} pays 1 ${t} from the stockpile.`);
   if (m.paid.length >= m.need) finishSourcing(g);
 }
 function sourceStockGifts(g) {
   const p = g.turn; const m = g.mode;
   for (const t of m.gifts) g.players[p].stock[t]--;
   m.paid = [...m.gifts];
-  g.log.unshift(`${PNAME[p]} pays ${m.paid.join(", ")} from the stockpile (embassy gifts).`);
+  g.log.unshift(`${g.world.PNAME[p]} pays ${m.paid.join(", ")} from the stockpile (embassy gifts).`);
   finishSourcing(g);
 }
 function finishSourcing(g) {
+  const { R, PLAYERS, PNAME } = g.world;
   const p = g.turn; const m = g.mode;
   if (m.kind === "build") { executeBuild(g); return; }
   if (m.kind === "trade") {
@@ -2445,6 +2474,7 @@ function finishSourcing(g) {
   }
 }
 function legalBuildTypes(g) {
+  const { R, HOME } = g.world;
   const rid = g.mode.region;
   const p = g.turn;
   const palR = g.act.palace;
@@ -2454,7 +2484,7 @@ function legalBuildTypes(g) {
   const emptyCoast = slots.some((s, i) => s === null && rdef.slots[i].c);
   const emptyRes = (res) => slots.some((s, i) => s === null && rdef.slots[i].res === res);
   const out = [];
-  const ordinary = rdist(palR, rid) <= ACTIONS.build.range(g, g.act) && rank(g, p, rid) >= 1;
+  const ordinary = rdist(g, palR, rid) <= ACTIONS.build.range(g, g.act) && rank(g, p, rid) >= 1;
   if (ordinary) {
     if (rdef.f >= 1 && emptyAny) out.push("farm");
     if (emptyAny) out.push("market", "granary", "garrison");
@@ -2474,7 +2504,7 @@ function canFeedBuild(g, p, siteRid) {
   return tapRegionsOf(g, p, siteRid).some((rid) => tapProducers(g, p, rid).some(([, , y]) => y.good === "food"));
 }
 function buildSlotFor(g, rid, t) {
-  const rdef = R[rid]; const slots = g.b[rid];
+  const rdef = g.world.R[rid]; const slots = g.b[rid];
   const RES_OF = { wsB: "copper", wsC: "cloth", wsP: "clay" };
   if (t === "port") return slots.findIndex((s, i) => s === null && rdef.slots[i].c);
   if (RES_OF[t]) return slots.findIndex((s, i) => s === null && rdef.slots[i].res === RES_OF[t]);
@@ -2488,6 +2518,7 @@ function placeBuild(g, t) {
   g.mode = { v: "source", kind: "build", region: rid, bt: t, actor: rid, phase: "choose", paid: [] };
 }
 function executeBuild(g) {
+  const { R, PNAME } = g.world;
   const p = g.turn; const m = g.mode;
   const rid = m.region; const t = m.bt;
   const idx = buildSlotFor(g, rid, t);
@@ -2503,6 +2534,7 @@ function executeBuild(g) {
 
 // ---- upkeep ----
 function runUpkeep(g, startAt) {
+  const { PNAME } = g.world;
   const order = live(g);
   let idx = Math.max(0, order.indexOf(startAt || order[0]));
   for (; idx < order.length; idx++) {
@@ -2536,13 +2568,14 @@ function available(g, rid, i, bd) {
 function unitReaches(g, p, rid, bd, t) {
   const u = BT[bd.t].unit;
   if (!u) return false;
-  return u.reach <= 1 ? rdist(rid, t) <= 1 : overland(g, p, rid, u.reach).has(t);
+  return u.reach <= 1 ? rdist(g, rid, t) <= 1 : overland(g, p, rid, u.reach).has(t);
 }
 // Every unit that could fight at `t` on side `side` for player `p`, and its terms.
 function battleUnits(g, p, t, side, mode) {
+  const { R } = g.world;
   const bySea = mode === "sea" && side === "atk";   // the defender always musters by land
   const out = [];
-  if (bySea && !isCoastal(t)) return out;
+  if (bySea && !isCoastal(g, t)) return out;
   for (const rid of Object.keys(g.b))
     g.b[rid].forEach((bd, i) => {
       if (!bd || !available(g, rid, i, bd)) return;
@@ -2569,7 +2602,7 @@ function battleUnits(g, p, t, side, mode) {
       const patron = live(g).find((q) => rank(g, q, rid) >= 2);
       if (R[rid].wild) {
         const byLand = unitReaches(g, p, rid, bd, t);
-        const seafaring = !!R[rid].sea && mode === "sea" && isCoastal(t);
+        const seafaring = !!R[rid].sea && mode === "sea" && isCoastal(g, t);
         if (!byLand && !seafaring) return;
         if (patron) { if (patron === p && byLand && !out.some((o) => o.terms === "allied" && o.rid === rid)) out.push({ rid, i, terms: "allied", cost: 1 }); return; }
         // wild peoples negotiate as PEOPLES at the bidding table, not as unit rows
@@ -2595,6 +2628,7 @@ function sideList(g, side) { return side === "atk" ? g.raid.atk : g.raid.defC; }
 function sidePlayer(g, side) { return side === "atk" ? g.turn : currentDefender(g); }
 function isCommitted(g, side, rid, i) { return sideList(g, side).some((c) => c.rid === rid && c.i === i); }
 function commitUnit(g, side, u, good) {
+  const { R, PNAME } = g.world;
   const who = sidePlayer(g, side);
   const price = unitPrice(u);
   if (price.kind === "influence") {
@@ -2614,6 +2648,7 @@ function commitUnit(g, side, u, good) {
   );
 }
 function uncommitUnit(g, side, rid, i) {
+  const { R, PNAME } = g.world;
   const who = sidePlayer(g, side);
   const list = sideList(g, side);
   const idx = list.findIndex((c) => c.rid === rid && c.i === i);
@@ -2637,17 +2672,18 @@ function toggleUnit(g, side, rid, i, good) {
   const u = battleUnits(g, who, g.raid.t, side, g.raid.mode).find((x) => x.rid === rid && x.i === i);
   if (!u) return;
   if (u.terms === "hire") return; // peoples are bid for at their table, not clicked
-  if (u.terms === "allied" && sideList(g, side).some((c) => c.rid === u.rid && c.terms === "allied")) { g.log.unshift(`${R[u.rid].n} answers a call with one band, and no more.`); return; }
+  if (u.terms === "allied" && sideList(g, side).some((c) => c.rid === u.rid && c.terms === "allied")) { g.log.unshift(`${g.world.R[u.rid].n} answers a call with one band, and no more.`); return; }
   const pick = good || (u.terms === "hire" ? GOODS.filter((t) => g.players[who].stock[t] > 0).sort((a, b) => g.players[who].stock[b] - g.players[who].stock[a])[0] : null);
   commitUnit(g, side, u, pick);
 }
 function biddablePeoples(g) {
   if (!g.raid) return [];
+  const { R, ADJ, PLAYERS } = g.world;
   const t = g.raid.t, out = [];
   for (const rid of Object.keys(g.b)) {
     if (!R[rid].wild) continue;
     const adj = (ADJ[t] || []).includes(rid);
-    const seaf = !!R[rid].sea && g.raid.mode === "sea" && isCoastal(t);
+    const seaf = !!R[rid].sea && g.raid.mode === "sea" && isCoastal(g, t);
     if (!adj && !seaf) continue;
     // TODO: two answers to "who patronises this people?" — `battleUnits` asks the same question
     // over a different walk.
@@ -2698,6 +2734,7 @@ function contestBasket(g, lot, party) {
 }
 // lay one good, or take it back: the goods leave the stores the instant they are laid
 function contestLay(g, lot, good, take) {
+  const { R, PNAME } = g.world;
   const c = g.contest; if (!c) return;
   const who = contestActor(g); if (!who) return;
   const party = contestPartyOf(g, who); if (party == null) return;
@@ -2731,6 +2768,7 @@ function contestWinner(g, lot) {
 // THE SUBVERSION resolves the moment the last participant stands: the winner's own
 // standing is the weight of the blow, and every other participant is pushed down by it.
 function resolveSubversion(g) {
+  const { R, PNAME } = g.world;
   const c = g.contest, rid = c.rid;
   const win = contestWinner(g, rid);
   if (!win) {
@@ -2772,6 +2810,7 @@ function hostilesIn(g, p, t) {
 // A province ceases to be yours to govern the moment it ceases to be your Subject:
 // the organs of state are turned out, at the usual price of an organ lost.
 function evictOrgans(g, p, rid) {
+  const { R, PNAME } = g.world;
   let n = 0;
   (g.b[rid] || []).forEach((bd, i) => { if (bd && BT[bd.t].annex && bd.o === p) { g.b[rid][i] = null; n++; } });
   if (!n) return 0;
@@ -2795,6 +2834,7 @@ function seated(g, p, rid) {
 // the next reckoning clears it. Do not assert it against the floor: `strained` and
 // `rr.i < FLOOR[rr.s]` disagree in both directions between one reckoning and the next.
 function relationsUpkeep(g) {
+  const { R, PNAME } = g.world;
   for (const p of live(g)) {
     for (const rid of Object.keys(g.rel[p])) {
       const rr = g.rel[p][rid];
@@ -2818,6 +2858,7 @@ function relationsUpkeep(g) {
   }
 }
 function finishUpkeep(g) {
+  const { PLAYERS, PNAME } = g.world;
   // THE RECKONING — grain does not keep. What the Food Store cannot hold spoils.
   for (const q of live(g)) {
     const pl = g.players[q];
@@ -2844,6 +2885,7 @@ function finishUpkeep(g) {
   g.log.unshift(`— Year ${g.round}. ${PNAME[g.turn]} to act. —`);
 }
 function perish(g, rid, i) {
+  const { R, PNAME } = g.world;
   const sf = g.shortfall;
   const bd = g.b[rid][i];
   g.b[rid][i] = null;
@@ -2873,12 +2915,22 @@ function perish(g, rid, i) {
 // If a new consumer needs a name, add it here deliberately and say who needs it. If you are
 // adding one so the interface can decide whether something is allowed, stop: that answer
 // belongs in `availableCommands`.
+// TRANSITIONAL — the canon world's tables, under their old names, for the one caller that has
+// not yet moved off them: the suites build fixtures against these (until they read the
+// scenario they seed with). The table imports NO world at all — the view carries the map's
+// facts inline — and engine code never reads these either: it reads `g.world`, so a game on
+// another scenario is never touched by them.
+const { R: CANON_R, REG: CANON_REG, PLAYERS: CANON_PLAYERS, HOME: CANON_HOME } = worldFrom(CANON);
+
 export {
   // THE DOORS — the whole API for anything that plays the game.
   initState, dispatch, availableCommands, view, validCmd,
 
-  // THE WORLD, as it is named and drawn. Facts about the map, not rules about it.
-  BT, HOME, NB, PCOL, PLAYERS, PNAME, R, REG, SLETTER,
+  // THE RULES' OWN TABLE — building types, read by the suites beside the world.
+  BT,
+
+  // THE WORLD OF THE CANON — transitional, see above.
+  CANON_HOME as HOME, CANON_PLAYERS as PLAYERS, CANON_R as R, CANON_REG as REG,
 
   // THE DIGESTS — same trajectory? (`g.chain`, carried on the state) · same position?
   fingerprint,

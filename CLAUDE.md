@@ -13,8 +13,11 @@ change it without breaking it.
 ```
 index.html         the page; loads levant/main.js
 levant/
-  engine.js        THE RULES. No React, no JSX, no DOM. ~2,700 lines, 29 exports.
-  app.jsx          THE TABLE. The hot-seat interface. ~530 lines; reads no field off `g`.
+  engine.js        THE RULES. No React, no JSX, no DOM. ~3,000 lines, ~25 exports.
+  scenario.js      THE WORLD AS AUTHORED — powers, map, opening position, one JSON-shaped
+                   object. initState validates it and compiles it onto `g.world` (immutable).
+  app.jsx          THE TABLE. The hot-seat interface. ~530 lines; reads no field off `g`,
+                   imports exactly three functions: view, dispatch, initState.
   main.jsx         the only file that knows a DOM exists: mounts App.
   table.css        the utility classes app.jsx's layout depends on.
 harness/
@@ -31,9 +34,10 @@ great-kings-player-rules.md   the rulebook, current with the engine
 Generated and gitignored: `levant/main.js`, `levant/main.css`, `harness/new.cjs` (the engine
 bundle the suites import), `harness/ref.cjs` (the differential's baseline).
 
-**Reading order for `engine.js`:** `REG`/`BT` (the world as data) → `ACTIONS` (every verb's
-range, cost, targets, commit) → `dispatch`/`availableCommands` (the command layer) → `view`
-(what the table is told) → then the harness.
+**Reading order for `engine.js`:** `worldFrom`/`validateScenario` (how `scenario.js` becomes
+`g.world`) → `BT` (the rules as data) → `ACTIONS` (every verb's range, cost, targets, commit)
+→ `dispatch`/`availableCommands` (the command layer) → `view` (what the table is told) → then
+the harness.
 
 **Platform:** `npm test` runs `bash harness/run-all.sh`. On Windows use Git Bash or WSL.
 

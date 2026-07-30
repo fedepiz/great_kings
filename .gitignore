@@ -1,7 +1,6 @@
 # Generated, and not worth keeping. Everything here is rebuilt by ./harness/run-all.sh or
-# `npm run build`. If a generated file is ever committed, `npm run build` produces a diff for
-# every developer who runs it — which is exactly what levant-prototype-v25.jsx used to do,
-# 191KB at a time, because it carried a build timestamp in its header.
+# `npm run build`. NEVER COMMIT A BUILD OUTPUT: it produces a diff for every developer who
+# runs the build, and a bundle carrying a timestamp produces one on every single run.
 node_modules/
 package-lock.json
 
@@ -17,3 +16,8 @@ harness/ref.cjs
 
 # scratch copies
 *.bak*
+
+# Claude Code's own directory: local settings, and the worktrees EnterWorktree creates under
+# .claude/worktrees/. A worktree is a second checkout of this repo, so committing it would
+# nest the repo inside itself.
+.claude/

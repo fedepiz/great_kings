@@ -21,23 +21,30 @@ import { dispatch, initState, view } from "./engine.js";
 import CANON from "./scenario.js";
 
 export default function App() {
-  const [g, setG] = useState(() => initState(CANON));
-  const upd = (fn) => setG((old) => { const n = JSON.parse(JSON.stringify(old)); fn(n); return n; });
-  // ONE QUESTION, ASKED ONCE PER RENDER. `g` is held so it can be handed back to `dispatch`,
-  // and is never read from — every fact below comes off `v`. If something is missing from `v`,
-  // the fix is a field on the view, not a read of `g` here.
-  const v = view(g);
+  // THE GAME IS A POSSESSION, NOT RENDER STATE. React's state is the VIEW — the one structure
+  // this table draws. `g` lives in a ref: held only to be handed back to `dispatch`, read by
+  // nothing, outside the render data-flow entirely. So `dispatch` may mutate it in place (no
+  // clone — nobody holds the old world), and `view` is asked ONCE PER COMMAND, not once per
+  // render: a pan or a zoom redraws the same view, because the world did not move.
+  // If something is missing from `v`, the fix is a field on the view, not a read of `g` here.
+  const gRef = useRef(null);
+  if (gRef.current === null) gRef.current = initState(CANON);
+  const [v, setV] = useState(() => view(gRef.current));
   const p = v.seat;
 
   const serif = { fontFamily: "Iowan Old Style, Palatino Linotype, Palatino, Georgia, serif" };
   const mono = { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" };
 
-  // A click is written against the board the player is LOOKING AT, so it carries that
-  // world's hash. If anything else lands a command while they are looking, the click is
-  // refused rather than applied to a board they never saw. Nothing else does, in a hot seat —
-  // but the stamp costs nothing and it is what makes a slow agent safe on shared state later.
-  // A command that arrives already stamped is left alone.
-  const go = (cmd) => upd((n) => dispatch(n, cmd && cmd.chain === undefined ? { ...cmd, chain: v.chain } : cmd));
+  // A click is written against the board the player is LOOKING AT — the view in React state —
+  // so it carries that view's hash. If anything else lands a command while they are looking,
+  // the click is refused rather than applied to a board they never saw. Nothing else does, in
+  // a hot seat — but the stamp costs nothing and it is what makes a slow agent safe on shared
+  // state later. A command that arrives already stamped is left alone.
+  const go = (cmd) => {
+    gRef.current = dispatch(gRef.current, cmd && cmd.chain === undefined ? { ...cmd, chain: v.chain } : cmd);
+    setV(view(gRef.current));
+  };
+  const reset = () => { gRef.current = initState(CANON); setV(view(gRef.current)); };
   const [modal, setModal] = useState(null); // { title, lines }
 
   const closeModal = () => setModal(null);
@@ -319,7 +326,7 @@ export default function App() {
             <div className="mt-3">
               <div className="flex justify-between items-baseline">
                 <div className="text-sm">Chronicle</div>
-                <button className="text-xs px-2 py-0.5 rounded" style={{ background: "#54492F" }} onClick={() => setG(initState(CANON))}>reset</button>
+                <button className="text-xs px-2 py-0.5 rounded" style={{ background: "#54492F" }} onClick={reset}>reset</button>
               </div>
               <div className="mt-1 p-2 rounded text-xs leading-relaxed" style={{ background: "#241F16", maxHeight: 230, overflowY: "auto", ...mono }}>
                 {chronicle.map((ln, i) => (
@@ -449,7 +456,7 @@ export default function App() {
               <div className="flex justify-between items-baseline mb-1">
                 <div className="text-sm" style={serif}>The chronicle</div>
                 <div className="flex gap-2">
-                  <button className="text-xs px-2 py-0.5 rounded" style={{ background: "#54492F" }} onClick={() => setG(initState(CANON))}>reset</button>
+                  <button className="text-xs px-2 py-0.5 rounded" style={{ background: "#54492F" }} onClick={reset}>reset</button>
                   <button className="text-xs px-2 py-0.5 rounded" style={{ background: "#3A3226", border: "1px solid #6B5B3E" }} onClick={() => setChronOpen(false)}>▾ hide</button>
                 </div>
               </div>

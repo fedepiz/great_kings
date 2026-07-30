@@ -74,8 +74,8 @@ left, or know that commands have types. It reads panels and draws them, and ship
 command attached to whatever was clicked.
 
 **Its whole reach into the engine is three functions** — `view`, `dispatch`, `initState` — and
-it **reads no field off `g` at all.** It holds the state so it can hand it back to `dispatch`,
-and asks `view(g)` once per render for everything else. A direct read of `g` from the interface
+it **reads no field off `g` at all.** It holds the state only to hand it back to `dispatch`;
+its render state is the view itself, asked once per command. A direct read of `g` from the interface
 would be a second source of a fact the view already reports, and a second source is how every
 bug in this project got in. If something is missing, the fix is a field on the view.
 

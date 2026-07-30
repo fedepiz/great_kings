@@ -52,12 +52,10 @@ in `test-subvert.js` and `test-verbs.js` — "everyone else drops by the winner'
 **Still wanted as assertions, and not yet written:** the reckoning leaves every good but food
 untouched; a basket stays with its lot through resolution, not only across `bid`/`bidTake`.
 
-**Order.** Delete the dead and the subsumed first — both are safe, and the subsumed ones only
-after their assertion has been seen to fire. Then the rewrites. Then one parameterised
-`walk({ seeds, rounds, choose, onState })` to replace the per-file xorshift and `clone`
-copies, and a coverage ratchet over `COMMANDS` and `ACTIONS` keys — a coverage-directed
-`choose` is what reaches `treaty` and `searaid` without a hand-built board, and `endRaid` and
-`stand` are reached by no walk at all — only by `test-strike.js`'s hand-built boards.
+**Order.** Delete the subsumed first, after their assertion has been seen to fire; then the
+rewrites. The endgame for everything in this section is the CHECKS suite below: its runner is
+the `walk()` consolidation, its per-check report is the coverage ratchet, and the rule suites
+dissolve into checks block by block.
 
 **One constraint this work established: a walk finding no counterexample is not a proof.** An
 invariant asserting `strained` against its floor survived 25,000 states of one walk, and another
@@ -198,18 +196,78 @@ Scheduling (every command, every turn, on a sample) and invariants-as-data
 the tests section; `test-query.js` carries the two invariants written so far (foremost ≡
 argmax, contests ascend) inline.
 
-## A successor to the differential
+## CHECKS: the rules as executable specification
 
-The seeded-robot differential (drive.js + diff.sh + ref.cjs) is removed. Its idea — determinism
-makes a refactor checkable — was right; its method was not. The robot chose from
-`availableCommands`, which itself mutates as rules change, so identical digests measured menu
-stability, not rule stability; it ran one driver against two builds of a moving API, which is
-exactly where it broke; and it demonstrably missed real defects (a rules change once turned 0
-of 196 won raids into 185 plundering ones while the differential held 10/10 — see
-test-strike's header).
+The successor to the retired differential, and the destination of the rule suites. The
+differential's robot chose from `availableCommands`, which mutates as rules change, so
+identical digests measured menu stability, not rule stability — it demonstrably missed a
+change that turned 0 of 196 won raids into 185 plundering ones. The fix is not a better
+robot; it is testing the RULES, semantically.
 
-A sound successor would fix the TRAJECTORY, not the policy: recorded command scripts — fixed
-command lists from authored openings, replayed through dispatch, with the resulting chronicle,
-chain and fingerprint pinned as goldens. A rules change then shifts named goldens, reviewed
-like any diff, instead of a robot's whim. Whether that earns its keep beside the suites and
-the armed invariants is the open question; design it before building it.
+**A CHECK is a Hoare triple over the doors: `{precondition} intent {postcondition}`.** Its
+three parts are the three layers already built — nothing reaches past them:
+
+- `pre` — queries with expected values, or a predicate over the ask-function. WRITTEN FROM
+  THE RULEBOOK, never from `availableCommands`: a precondition transcribed off the menu tests
+  the menu against itself and passes forever. Every check cites its rulebook section;
+  `great-kings-player-rules.md` claims to be exactly as implemented, and the checks are the
+  executable form of that claim.
+- `intent` — a list of ORDERS, each tagged with the desk expected to speak it (raids and
+  subversions pass the desk around; `Order.commands` already stops at desk boundaries).
+  Desugared to commands by `Order.commands`, executed through `dispatch`.
+- `post` — a predicate over the (before, after) pair of ask-functions. RELATIONAL, not
+  literal: "stores rose by the sum of the swept yields", "every non-winner dropped by the
+  winner's standing". A literal appears only where the literal IS the rule, and then it comes
+  from `BT`, not restated.
+
+A check is a TEMPLATE, not a script: it has parameters ("for a power p and region r where
+standing(p,r) = friend and influence ≥ the Ally floor and no incumbent stands higher…"), and
+the precondition is what a driver uses to find bindings.
+
+**Every check runs in three modes, and the third is the point:**
+
+1. pre true → drive the intent → assert post;
+2. pre true but the intent UNDRIVABLE (Order licenses nothing) → red: the menu is stricter
+   than the written rule, or the written rule is incomplete — either is a finding;
+3. pre FALSE → assert the intent is undrivable — the catcher for rules that are not
+   enforced, which is the class of bug this project's history says matters most.
+
+Together 1–3 make each check a biconditional test of `availableCommands` against the
+rulebook, in both directions. Negative rules (once per year, the wild never submit) are
+checks whose expected outcome is UNDRIVABLE by design.
+
+**Invariants are the same shape with the condition removed:** predicates over
+(before, command, after), applied to every transition, each with a DECLARED SCOPE (every
+transition / action boundaries / the reckoning — `strained` taught that invariants have
+scopes). One runner core observes transitions and evaluates two tables: the invariants
+(unconditional) and the checks (gated). Seed the invariants table from the three already
+proven elsewhere: a refusal moves nothing, a contest mints or burns no goods, contests
+ascend by investment.
+
+**Two drivers over one definition:**
+
+- the WALKER: random play; at each state, find checks whose preconditions hold under some
+  binding, apply one (or deliberately attempt one whose pre is false, for mode 3), verify.
+  Parameterised — seeds, rounds, which checks, choose-policy — so guidance can come later:
+  bias `choose` toward states that make COLD preconditions true.
+- the SCRIPT: an authored scenario with known bindings, checks applied in a fixed order —
+  what the rule suites are today, re-expressed as data.
+
+**Non-vacuity lives in the runner, not in review.** The report is part of the design: per
+check — precondition seen true / fired / undrivable / violated — and the run FAILS on a check
+never exercised. A check that never fires is a decoration; the coast assertion and the
+once-per-year menu both taught this. This subsumes the coverage ratchet the tests section
+planned: the coverage unit is RULES EXERCISED, not command names emitted.
+
+**Migration order.** Runner + invariants table + five seed checks (the levy, the embassy's
+worth, the treaty climb, one raid, and once-per-year as a negative) → the walker with its
+three-mode report → dissolve the rule suites block by block as their claims are subsumed
+(economy, ownership, war, raid, strike, subvert, verbs). What stays outside, because they are
+not rules: the totality fuzz (test-commands — it needs ILLEGAL inputs the walker never
+generates), the door contracts (test-orders, test-view, test-query — whose walk-based parts
+fold into this runner), the boundary gate, and the render smoke. End state: one rules suite,
+four contract suites, two mechanical gates.
+
+The honest cost is the specification work: ~25–30 checks to cover the rulebook, each forcing
+"what does this rule actually require?" — and some of those questions will expose ambiguities
+in the rulebook itself. That is a feature, and it is where the time goes.

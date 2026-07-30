@@ -11,36 +11,40 @@ import React, { useState, useRef } from "react";
 // particular nothing that answers "may this be done" — that lives behind `view`, which is the
 // only question this file asks.
 //
-// The rest are the WORLD: names, colours, coordinates, neighbours, the letters a rung is drawn
-// with. Facts about the board's shape, which never change, as against its state, which the view
-// reports. `REG` holds x/y because where Ugarit sits relative to Byblos is a fact like which
-// regions border it.
-//
-// KEEP THIS LIST MINIMAL. An imported rule is an invitation to enforce it here, and a rule
-// enforced here is not enforced at all — see CLAUDE.md.
-import {
-  NB, PCOL, PNAME, R, REG, SLETTER,                    // the world, as it is named and drawn
-  dispatch, initState, view,
-} from "./engine.js";
+// The fourth import is DATA, not a rule: the engine ships no world, so the shell that starts
+// a game names the scenario it seats. The map's own facts — names, colours, coordinates,
+// roads, the ground on each slot — still arrive on the view like everything else; CANON is
+// handed to initState and never read for drawing. KEEP THE FUNCTION LIST AT THREE. An
+// imported rule is an invitation to enforce it here, and a rule enforced here is not
+// enforced at all — see CLAUDE.md.
+import { dispatch, initState, view } from "./engine.js";
+import CANON from "./scenario.js";
 
 export default function App() {
-  const [g, setG] = useState(initState);
-  const upd = (fn) => setG((old) => { const n = JSON.parse(JSON.stringify(old)); fn(n); return n; });
-  // ONE QUESTION, ASKED ONCE PER RENDER. `g` is held so it can be handed back to `dispatch`,
-  // and is never read from — every fact below comes off `v`. If something is missing from `v`,
-  // the fix is a field on the view, not a read of `g` here.
-  const v = view(g);
+  // THE GAME IS A POSSESSION, NOT RENDER STATE. React's state is the VIEW — the one structure
+  // this table draws. `g` lives in a ref: held only to be handed back to `dispatch`, read by
+  // nothing, outside the render data-flow entirely. So `dispatch` may mutate it in place (no
+  // clone — nobody holds the old world), and `view` is asked ONCE PER COMMAND, not once per
+  // render: a pan or a zoom redraws the same view, because the world did not move.
+  // If something is missing from `v`, the fix is a field on the view, not a read of `g` here.
+  const gRef = useRef(null);
+  if (gRef.current === null) gRef.current = initState(CANON);
+  const [v, setV] = useState(() => view(gRef.current));
   const p = v.seat;
 
   const serif = { fontFamily: "Iowan Old Style, Palatino Linotype, Palatino, Georgia, serif" };
   const mono = { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" };
 
-  // A click is written against the board the player is LOOKING AT, so it carries that
-  // world's hash. If anything else lands a command while they are looking, the click is
-  // refused rather than applied to a board they never saw. Nothing else does, in a hot seat —
-  // but the stamp costs nothing and it is what makes a slow agent safe on shared state later.
-  // A command that arrives already stamped is left alone.
-  const go = (cmd) => upd((n) => dispatch(n, cmd && cmd.chain === undefined ? { ...cmd, chain: v.chain } : cmd));
+  // A click is written against the board the player is LOOKING AT — the view in React state —
+  // so it carries that view's hash. If anything else lands a command while they are looking,
+  // the click is refused rather than applied to a board they never saw. Nothing else does, in
+  // a hot seat — but the stamp costs nothing and it is what makes a slow agent safe on shared
+  // state later. A command that arrives already stamped is left alone.
+  const go = (cmd) => {
+    gRef.current = dispatch(gRef.current, cmd && cmd.chain === undefined ? { ...cmd, chain: v.chain } : cmd);
+    setV(view(gRef.current));
+  };
+  const reset = () => { gRef.current = initState(CANON); setV(view(gRef.current)); };
   const [modal, setModal] = useState(null); // { title, lines }
 
   const closeModal = () => setModal(null);
@@ -136,18 +140,19 @@ export default function App() {
   // a drag must not also count as a click on whatever was underneath
   const noDrag = (fn) => () => { if (pan.current.moved) { pan.current.moved = false; return; } fn(); };
   const SLOT = 26, GAP = 5, PADX = 8, HEAD = 19;
-  const regW = (r) => Math.max(PADX * 2 + r.slots.length * SLOT + (r.slots.length - 1) * GAP, 100);
+  const regW = (place) => Math.max(PADX * 2 + place.works.length * SLOT + (place.works.length - 1) * GAP, 100);
   const regH = HEAD + SLOT + 23;
-  const cx = (r) => r.x + regW(r) / 2;
-  const cy = (r) => r.y + regH / 2;
+  const cx = (place) => place.at[0] + regW(place) / 2;
+  const cy = (place) => place.at[1] + regH / 2;
 
   // A capital says "home" rather than its king's relation to himself. Everything else lists who
-  // stands there. Both readings come from the region's own facts — `subject.home` and
-  // `relations` — never from walking `g.rel`.
+  // stands there. Both readings come from the region's own facts — `subject` and `relations` —
+  // never from walking `g.rel`, and each row arrives with its power's name and colour.
   const relLine = (place) => {
-    if (place.subject.home) return [[place.subject.home, "home", PCOL[place.subject.home]]];
+    const sj = place.subject;
+    if (sj.home) return [[sj.home, sj.homeName, "home", sj.homeColor]];
     return (place.relations || []).map((rr) =>
-      [rr.power, `${rr.influence}${SLETTER[rr.rung]}${rr.strained ? "!" : ""}`, PCOL[rr.power]]);
+      [rr.power, rr.name, `${rr.influence}${rr.rungLetter}${rr.strained ? "!" : ""}`, rr.color]);
   };
 
   // ---- the panel's sections, each with one home, so desktop and phone can place them differently ----
@@ -206,7 +211,7 @@ export default function App() {
   };
   const drawPanel = (pan, k) => {
     if (pan.kind === "note")
-      return <div key={k} className="mt-1 text-sm" style={{ color: PCOL[p] }}>{pan.text}</div>;
+      return <div key={k} className="mt-1 text-sm" style={{ color: v.seatColor }}>{pan.text}</div>;
     if (pan.kind === "notice") {
       const n = NOTICE[pan.level] || NOTICE.info;
       return (
@@ -284,14 +289,12 @@ export default function App() {
   // THE MAP'S PANEL. Its own band, because it is not drawn in the column — the board places
   // it. `mapOf(rid)` is the whole of what the table knows about a province's standing and
   // what may be done there; there is no second route.
-  const mapPanel = v.panels.find((pan) => pan.kind === "map") || { regions: {} };
+  const mapPanel = v.panels.find((pan) => pan.kind === "map") || { regions: {}, connections: [] };
   // THE CHRONICLE, from the view like everything else. Its own band, because the shell places
   // it rather than the column: a floating dialog on a desk, folded into the sheet on a phone.
   // Both draw the same panel. `fresh` is the state saying which line has just landed; drawing
   // the rest at 70% opacity is this table reading that.
   const chronicle = (v.panels.find((pan) => pan.kind === "chronicle") || { lines: [] }).lines;
-  const EMPTY_REGION = { options: [], slots: {}, subject: {}, works: [], relations: [] };
-  const mapOf = (rid) => mapPanel.regions[rid] || EMPTY_REGION;
   // A place may host several options at once; the first that may be taken is what a click on
   // it means. A blocked one still carries its `why`, which is what the hover says.
   const takeable = (os) => (os || []).find((o) => o.cmd) || null;
@@ -303,7 +306,7 @@ export default function App() {
             <div key={k} className="mt-3 p-2 rounded"
               style={{ background: pan.subject.self ? "#3A3226" : "#332C21", border: "1px solid #54492F" }}>
               <div className="flex justify-between text-sm">
-                <b style={{ color: PCOL[pan.subject.power] }}>{pan.label}</b>
+                <b style={{ color: pan.subject.color }}>{pan.label}</b>
                 <span style={mono} className="text-xs">food store {pan.subject.store}</span>
               </div>
               {pan.rows.map((r, i) => (
@@ -323,7 +326,7 @@ export default function App() {
             <div className="mt-3">
               <div className="flex justify-between items-baseline">
                 <div className="text-sm">Chronicle</div>
-                <button className="text-xs px-2 py-0.5 rounded" style={{ background: "#54492F" }} onClick={() => setG(initState())}>reset</button>
+                <button className="text-xs px-2 py-0.5 rounded" style={{ background: "#54492F" }} onClick={reset}>reset</button>
               </div>
               <div className="mt-1 p-2 rounded text-xs leading-relaxed" style={{ background: "#241F16", maxHeight: 230, overflowY: "auto", ...mono }}>
                 {chronicle.map((ln, i) => (
@@ -346,24 +349,28 @@ export default function App() {
           <text x="205" y="640" fontSize="15" fill="#9FC0DA" opacity="0.75" style={{ ...serif, pointerEvents: "none", letterSpacing: 4 }}>
             THE GREAT SEA
           </text>
-          {NB.map(([a, b], i) => (
-            <line key={i} x1={cx(R[a])} y1={cy(R[a])} x2={cx(R[b])} y2={cy(R[b])} stroke="#B3A47F" strokeWidth="2.5" />
+          {mapPanel.connections.map(([a, b], i) => (
+            <line key={i} x1={cx(mapPanel.regions[a])} y1={cy(mapPanel.regions[a])} x2={cx(mapPanel.regions[b])} y2={cy(mapPanel.regions[b])} stroke="#B3A47F" strokeWidth="2.5" />
           ))}
 
-          {REG.map((r) => {
-            // everything the board knows about this province comes from here
-            const place = mapOf(r.id);
-            const { home, holder: subj, ally: allyOf, coastal, acting: isActPal } = place.subject;
+          {Object.entries(mapPanel.regions).map(([rid, place]) => {
+            // everything the board knows about this province comes from here — its geography
+            // (`name`, `at`, `farm`, the ground on each work row) included
+            const { home, holderColor, allyColor, coastal, wild, acting: isActPal } = place.subject;
+            // home ground and held ground both wear a king's colour; which king is a fact,
+            // that they are drawn alike is this table's reading
+            const heldColor = holderColor || place.subject.homeColor;
+            const [rx, ry] = place.at;
             const pick = takeable(place.options);
             const hotR = !!pick;
-            const w = regW(r);
+            const w = regW(place);
             return (
-              <g key={r.id}>
-                <rect x={r.x} y={r.y} width={w} height={regH} rx={r.wild ? 2 : 9}
-                  fill={subj ? PCOL[subj] + "26" : r.wild ? "#BCA678" : "#D8CCA8"}
-                  stroke={hotR ? "#7A3B0E" : isActPal ? "#2A241B" : subj ? PCOL[subj] : allyOf ? PCOL[allyOf] : r.wild ? "#6E5C3A" : "#A69770"}
-                  strokeWidth={hotR ? 3 : isActPal ? 2.5 : subj ? 2 : 1.4}
-                  strokeDasharray={allyOf && !subj ? "6 3" : r.wild ? "2 3" : undefined}
+              <g key={rid}>
+                <rect x={rx} y={ry} width={w} height={regH} rx={wild ? 2 : 9}
+                  fill={heldColor ? heldColor + "26" : wild ? "#BCA678" : "#D8CCA8"}
+                  stroke={hotR ? "#7A3B0E" : isActPal ? "#2A241B" : heldColor ? heldColor : allyColor ? allyColor : wild ? "#6E5C3A" : "#A69770"}
+                  strokeWidth={hotR ? 3 : isActPal ? 2.5 : heldColor ? 2 : 1.4}
+                  strokeDasharray={allyColor && !heldColor ? "6 3" : wild ? "2 3" : undefined}
                   style={{ cursor: hotR ? "pointer" : "default" }}
                   onClick={noDrag(() => pick && go(pick.cmd))}
                 >
@@ -371,57 +378,55 @@ export default function App() {
                   {(place.options[0] || {}).why && <title>{place.options[0].why}</title>}
                 </rect>
                 {coastal && (
-                  <rect x={r.x + w - 11} y={r.y + regH - 11} width="7" height="7" rx="1.5"
+                  <rect x={rx + w - 11} y={ry + regH - 11} width="7" height="7" rx="1.5"
                     fill="#3E5F82" stroke="#22384D" strokeWidth="0.8" style={{ pointerEvents: "none" }} />
                 )}
-                <text x={r.x + PADX} y={r.y + 14} fontSize="11" fill={r.wild ? "#4A3D24" : "#2A241B"} style={{ ...serif, pointerEvents: "none" }}>
-                  {r.wild ? "⌃ " : ""}{r.n}{home ? " ✶" : ""}{r.f > 0 ? `  ·  f${r.f}` : ""}{r.wild ? "  ·  wild" : ""}
+                <text x={rx + PADX} y={ry + 14} fontSize="11" fill={wild ? "#4A3D24" : "#2A241B"} style={{ ...serif, pointerEvents: "none" }}>
+                  {wild ? "⌃ " : ""}{place.name}{home ? " ✶" : ""}{place.farm > 0 ? `  ·  f${place.farm}` : ""}{wild ? "  ·  wild" : ""}
                 </text>
-                {r.slots.map((s, i) => {
-                  // what is built here, from the view. `works` runs parallel to `r.slots`:
-                  // REG says what the GROUND is (sea, a resource, plain), the view says what
-                  // STANDS on it. An empty slot is `{ building: null }`, never absent.
-                  const w = (place.works || [])[i] || { building: null };
-                  const sx = r.x + PADX + i * (SLOT + GAP);
-                  const sy = r.y + HEAD;
+                {place.works.map((w, i) => {
+                  // one row per slot, from the view: the GROUND (sea, a resource, plain) and
+                  // what STANDS on it. An empty slot is `{ building: null }` plus its ground.
+                  const sx = rx + PADX + i * (SLOT + GAP);
+                  const sy = ry + HEAD;
                   // whether this slot may be clicked, and what the click MEANS — opening a
                   // building or picking one inside an activation — is the engine's to say.
                   const sPick = takeable(place.slots[i]);
                   const hotS = !!sPick;
                   return (
                     <g key={i} style={{ cursor: hotS ? "pointer" : "default" }} onClick={noDrag(() => sPick && go(sPick.cmd))}>
-                      {r.wild ? (
+                      {wild ? (
                         <circle cx={sx + SLOT / 2} cy={sy + SLOT / 2} r={SLOT / 2 - 1}
                           fill="#D6C39A" stroke={hotS ? "#7A3B0E" : "#6E5C3A"} strokeWidth={hotS ? 2.5 : 1}
                           strokeDasharray={hotS ? undefined : "2 3"} />
                       ) : (
                         <rect x={sx} y={sy} width={SLOT} height={SLOT} rx="5"
-                          fill={s.c ? "#C7D5E2" : s.res ? "#D9C08F" : "#EFE7CE"}
+                          fill={w.coast ? "#C7D5E2" : w.res ? "#D9C08F" : "#EFE7CE"}
                           stroke={hotS ? "#7A3B0E" : "#A69770"} strokeWidth={hotS ? 2.5 : 1} />
                       )}
-                      {!w.building && (s.c || s.res) && (
+                      {!w.building && (w.coast || w.res) && (
                         <text x={sx + SLOT / 2} y={sy + SLOT / 2 + 3} fontSize="8" textAnchor="middle" fill="#54492F" style={mono}>
-                          {s.c ? "sea" : { copper: "Cu", cloth: "Dy", clay: "Ky" }[s.res]}
+                          {w.coast ? "sea" : { copper: "Cu", cloth: "Dy", clay: "Ky" }[w.res]}
                         </text>
                       )}
                       {w.building && (
                         // tilted and faded once it has acted: a building's year is spent.
-                        // `w.power` is the owning king or null — a province's own work, and a
-                        // wild people's warband, both come back null and take the neutral brown.
+                        // `w.color` is the owning king's colour or null — a province's own
+                        // work, and a wild people's warband, both take the neutral brown.
                         <g transform={w.spent ? `rotate(12 ${sx + SLOT / 2} ${sy + SLOT / 2})` : undefined} opacity={w.spent ? 0.5 : 1}>
                           <title>{w.label}</title>
                           <rect x={sx + 3} y={sy + 3} width={SLOT - 6} height={SLOT - 6} rx="4"
                             fill="#F5EDD8"
-                            stroke={w.power ? PCOL[w.power] : "#8A6A2F"} strokeWidth="2.2" />
+                            stroke={w.color || "#8A6A2F"} strokeWidth="2.2" />
                           <text x={sx + SLOT / 2} y={sy + SLOT / 2 + 3.5} fontSize="10" textAnchor="middle" fill="#2A241B" style={mono}>{GLYPH[w.building]}</text>
                         </g>
                       )}
                     </g>
                   );
                 })}
-                <text x={r.x + PADX} y={r.y + regH - 6} fontSize="9" style={mono}>
-                  {relLine(place).map(([q, s, col], i) => (
-                    <tspan key={q} fill={col}>{i > 0 ? "  " : ""}{PNAME[q].slice(0, 2)} {s}</tspan>
+                <text x={rx + PADX} y={ry + regH - 6} fontSize="9" style={mono}>
+                  {relLine(place).map(([q, nm, s, col], i) => (
+                    <tspan key={q} fill={col}>{i > 0 ? "  " : ""}{nm.slice(0, 2)} {s}</tspan>
                   ))}
                 </text>
               </g>
@@ -451,7 +456,7 @@ export default function App() {
               <div className="flex justify-between items-baseline mb-1">
                 <div className="text-sm" style={serif}>The chronicle</div>
                 <div className="flex gap-2">
-                  <button className="text-xs px-2 py-0.5 rounded" style={{ background: "#54492F" }} onClick={() => setG(initState())}>reset</button>
+                  <button className="text-xs px-2 py-0.5 rounded" style={{ background: "#54492F" }} onClick={reset}>reset</button>
                   <button className="text-xs px-2 py-0.5 rounded" style={{ background: "#3A3226", border: "1px solid #6B5B3E" }} onClick={() => setChronOpen(false)}>▾ hide</button>
                 </div>
               </div>

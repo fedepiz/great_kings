@@ -19,12 +19,14 @@ cd "$(dirname "$0")/.."
 # assertion firing throws, so the suite that reached the broken world reports it and stops.
 export GK_CHECK=1
 
-# harness/new.cjs is the engine as the suites import it, and harness/ref.cjs is the
-# differential's accepted baseline. Both are generated; neither is committed.
+# harness/new.cjs is the engine as the suites import it; harness/scenario.cjs is the canon
+# world as data, which the suites author their fixtures from; harness/ref.cjs is the
+# differential's accepted baseline. All are generated; none is committed.
 echo "— engine bundle —"
-rm -f harness/new.cjs
+rm -f harness/new.cjs harness/scenario.cjs
 npx esbuild levant/engine.js --format=cjs --bundle --outfile=harness/new.cjs >/dev/null
-echo "  harness/new.cjs"
+npx esbuild levant/scenario.js --format=cjs --bundle --outfile=harness/scenario.cjs >/dev/null
+echo "  harness/new.cjs + harness/scenario.cjs"
 
 echo "— differential —"
 # The reference is a copy of the bundle at a point whose play was accepted. A fresh clone has

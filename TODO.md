@@ -34,8 +34,10 @@ checking an oracle whose value is not derivable from the code under test.
 | `test-war.js` "damage walks down the ladder" | the loop applies its own `-2`; no strike code executes, so the engine could stop subtracting and this stays green |
 
 Deleting the last one leaves raid strike damage uncovered — random play fires roughly one strike
-per eight seeds. Replace it with a raid driven through `dispatch` to a strike, asserting damage
-falls on `foremostIn` and is recomputed between blows.
+per eight seeds. Its replacement is already written: the destroy-branch block of
+`harness/engine/repro-strike.js` drives a raid through `dispatch` to two strikes and asserts the
+damage falls on `foremostIn` and is recomputed between blows. Delete the `test-war.js` entry when
+that file joins the suite list — see the section on a province's works defending it.
 
 **Delete — an assertion already covers them.**
 
@@ -162,24 +164,57 @@ To decide: whether the two seats want distinct treatments (a persistent "X to ac
 a temporary "Y is answering" state), and whether an interleaved actor should be visible on the
 board as well as in the panel.
 
-## Double-check the combat logic
+## A province's works defend it, so a raid can never plunder one
 
-Two parts of a raid's resolution to verify against the rulebook (§9) — not known to be wrong,
-just never checked end to end.
+Checked end to end against §9, driven through `dispatch`, by `harness/engine/repro-strike.js`.
+Two of its thirteen claims are false in the engine as written. `doStrike` is not the fault: both
+its branches are correct, and the foremost walks down the ladder exactly as §9 says. The fault is
+upstream, in who is allowed to take the field.
 
-**1. Which works at the defending location can be activated.** What the defence is permitted to
-put in the field, and on what terms: the target's own militia, a protector's reachable units, an
-allied region answering a call, an untapped fortress adding to walls, and the wild peoples
-reached by bidding. `battleUnits`, `fortressDef` and `biddablePeoples` are the places to start.
+**The defect.** `battleUnits`'s militia branch is the one place that never asks whether a
+building is a unit:
 
-**2. That a victorious attacker actually gets the two strike outcomes.** Per the rules a strike
-on an UNTAPPED work overruns it — it taps, and a producer surrenders its full yield to the
-attacker — while a strike on an ALREADY-TAPPED work destroys it. Confirm both branches fire, the
-extracted yield is the full amount and reaches the attacker's stores, and destruction applies
-its influence penalty to the foremost. `doStrike` implements the branch and `hostilesIn` gates
-which works are candidates.
+```js
+if (rid === t) { if (side === "def") out.push({ rid, i, terms: "militia", cost: 0 }); return; }
+```
 
-Random play reaches strikes rarely — roughly one per eight seeds — so this wants a raid driven
-through `dispatch` to resolution rather than a walk. Note the overlap with the `test-war.js`
-"damage walks down the ladder" entry above, which asserts strike damage without running any
-strike code: one scenario can serve both.
+Every other branch reaches `unitReaches`, which opens `const u = BT[bd.t].unit; if (!u) return
+false`. So an undefended province defends with its farms, markets, granaries and workshops, each
+worth 1 defence — and because `commitUnit` taps whatever it commits, the province's producers are
+tapped before the strikes are chosen.
+
+**Why that makes the overrun branch unreachable.** `launchRaid` commits
+`need = min(max(0, A − walls), own.length)` militia, and the raid is won only when `A > need +
+walls`. If `need = A − walls` the defence exactly matches the attack and the raid is REPELLED; so
+a won raid is precisely one where `need = own.length` — every untapped work in the target has
+been conscripted and tapped. Every strike therefore lands on the destroy branch. `repro-strike.js`
+drives 496 raids on an unprotected Qadesh across every composition of its slots and every attacker
+strength: 196 won, **0 plundered anything, and not one left an untapped producer to overrun.**
+The "larder raid" of §13 tip 6 — "each strike on an untapped producer plunders its full yield …
+against truly bare ground it is often the cheapest food on the map" — cannot happen.
+
+**The fix**, one clause, in `battleUnits`:
+
+```js
+if (rid === t) { if (side === "def" && BT[bd.t].unit) out.push({ rid, i, terms: "militia", cost: 0 }); return; }
+```
+
+It is free: the differential stays **10/10 identical** and all ten suites stay green, because no
+walk has ever reached an undefended target. That is the measure of how invisible this was, not
+evidence that it is small — with the clause in place those same 496 raids win 421 and plunder 185.
+
+**And a second answer read off a different ledger.** `view`'s field panel reports the defence as
+`fortressDef(g, g.raid.t)` — two arguments to a three-argument function, so `t` is `undefined`,
+`g.b[undefined]` is `[]`, and the total is **literally always `defence 0`**, walls or no walls,
+units or no units, while `resolveRaid` counts `defC` plus walls. The attacker's column is honest
+(`strength ${raidStrength(g)}`), so the two columns are not reporting the same kind of thing. The
+fix is to compute it the way the resolution does:
+
+```js
+total: `defence ${g.raid.defC.filter((u) => u.terms !== "hire").length + fortressDef(g, raider, g.raid.t)}`
+```
+
+**When the fix lands:** apply both clauses, rename `repro-strike.js` to `test-strike.js` and add
+`strike` to `run-all.sh`'s suite list, and delete `test-war.js`'s "damage walks down the ladder"
+— the repro's destroy-branch block is the same claim with the strike code actually running, which
+is what the entry above asks for.

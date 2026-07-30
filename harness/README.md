@@ -27,7 +27,7 @@ breaking them; each suite's deeper rationale lives in its own header.
    | `test-strike` | war from assembly to the last strike, on boards random play never reaches |
    | `test-subvert` | the subversion: poorest speaks first; the winner's standing is the blow's weight |
    | `test-verbs` | the thin verbs — treaty's climb and overtake, the sea raid — pinned by hand because random play barely lands them (treaty: once in 8 games) |
-   | `test-checks` | THE RULES AS EXECUTABLE SPECIFICATION: a generator plays; observer trackers match the play against rulebook-cited Hoare triples via `Order.allows`; a coverage histogram names the rules not yet specified. The destination of the rule suites — see TODO.md |
+   | `test-checks` | THE RULES AS EXECUTABLE SPECIFICATION: a generator plays; observer trackers match the play against rulebook-cited Hoare triples via `Order.allows`; a coverage histogram names the rules not yet specified. The destination of the rule suites — see TODO.md. Run standalone for the full report; scale by flags, all defaulted: `node test-checks.js --seeds 1,2,3 --length 2000 --rounds 20 --worlds canon` |
 
    Two things ride along with every suite. `GK_CHECK=1` (set by `run-all.sh`) arms the
    engine's own invariants — `checkWorld` (true of every state), `checkMenu` (true of every

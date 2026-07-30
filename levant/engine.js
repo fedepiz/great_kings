@@ -1445,7 +1445,7 @@ function view(g) {
       label: `${g.raid.mode === "sea" ? "Sea raid" : "Raid"} on ${R[g.raid.t].n}`,
       columns: [
         { label: PNAME[raider] || "the raiders", rows: named(g.raid.atk), total: `strength ${raidStrength(g)}` },
-        { label: R[g.raid.t].n, rows: named(g.raid.defC), total: `defence ${fortressDef(g, g.raid.t)}` },
+        { label: R[g.raid.t].n, rows: named(g.raid.defC), total: `defence ${defenceStrength(g)}` },
       ] });
 
     // the units this court may still put in or take out of the field
@@ -2175,6 +2175,14 @@ function clickRegion(g, rid) {
 }
 
 function raidStrength(g) { return g.raid.atk.filter((c) => c.terms !== "hire").length; }
+// THE TWO SIDES ARE RECKONED THE SAME WAY, in one place each: every unit committed on terms that
+// count, and for the defence the walls, which never tire. The muster, the resolution and the
+// table all ask here — a second reckoning anywhere is a second answer.
+// TODO: vestigial fields — `battleUnits` never sets `deny`, so `!c.deny` filters nothing. A unit
+// that takes the field but does not count needs a rule.
+function defenceStrength(g) {
+  return g.raid.defC.filter((c) => c.terms !== "hire" && !c.deny).length + fortressDef(g, g.turn, g.raid.t);
+}
 // Every power holding Friend-or-better in the target is a defender. They muster one at a time,
 // LOWEST influence first — so the power with most at stake speaks last, seeing everything.
 // Ties fall to turn order. Each pays from its own stores; their strengths and their gift-baskets sum.
@@ -2229,12 +2237,11 @@ function autoMuster(g) {
   const q = currentDefender(g); if (!q) return;
   const t = g.raid.t;
   const walls = fortressDef(g, g.turn, t);
-  let D = g.raid.defC.filter((c) => c.terms !== "hire").length + walls;
   const need = raidStrength(g);
   const pool = battleUnits(g, q, t, "def", g.raid.mode).filter((u) => u.terms === "own");
   let added = 0;
-  for (const u of pool) { if (D >= need) break; commitUnit(g, "def", u, null); D++; added++; }
-  g.log.unshift(`${PNAME[q]} musters what the hour requires — ${added} unit(s) tap and take the field; the defence stands at ${D}${walls ? ` (walls ${walls})` : ""} against ${need}.`);
+  for (const u of pool) { if (defenceStrength(g) >= need) break; commitUnit(g, "def", u, null); added++; }
+  g.log.unshift(`${PNAME[q]} musters what the hour requires — ${added} unit(s) tap and take the field; the defence stands at ${defenceStrength(g)}${walls ? ` (walls ${walls})` : ""} against ${need}.`);
 }
 function nextDefender(g) {
   const c = g.contest;
@@ -2249,11 +2256,9 @@ function nextDefender(g) {
 function resolveRaid(g) {
   const p = g.turn;
   const t = g.raid.t;
-  // TODO: vestigial fields — battleUnits never sets `deny`, so `!c.deny` filters nothing. A
-  // unit that takes the field but does not count needs a rule.
-  let A = raidStrength(g), D = g.raid.defC.filter((c) => c.terms !== "hire" && !c.deny).length;
+  let A = raidStrength(g), D = defenceStrength(g);
   const ft = fortressDef(g, p, t);
-  if (ft) { D += ft; g.log.unshift(`The walls of ${R[t].n} stand in the defense (+${ft}, never tiring).`); }
+  if (ft) g.log.unshift(`The walls of ${R[t].n} stand in the defense (+${ft}, never tiring).`);
   const lots = (g.contest && g.contest.lots) || {};
   for (const pid of Object.keys(lots)) {
     const book = lots[pid] || {};
@@ -2553,7 +2558,14 @@ function battleUnits(g, p, t, side, mode) {
         return;
       }
       if (bd.o !== rid) return; // another power's building never joins you
-      if (rid === t) { if (side === "def") out.push({ rid, i, terms: "militia", cost: 0 }); return; }
+      // MILITIA IS A UNIT STANDING ON THE BATTLEFIELD, and the unit table is what says so. A
+      // province's farms and workshops are not its defence — they are what the raid came for,
+      // and conscripting one taps it, which turns every strike on it from an overrun into a
+      // demolition. This is the only branch that does not reach `unitReaches`, so it is the only
+      // one that has to ask.
+      if (rid === t) { if (side === "def" && BT[bd.t].unit) out.push({ rid, i, terms: "militia", cost: 0 }); return; }
+      // TODO: two answers to "who patronises this people?" — `biddablePeoples` asks the same
+      // question over a different walk.
       const patron = live(g).find((q) => rank(g, q, rid) >= 2);
       if (R[rid].wild) {
         const byLand = unitReaches(g, p, rid, bd, t);
@@ -2637,6 +2649,8 @@ function biddablePeoples(g) {
     const adj = (ADJ[t] || []).includes(rid);
     const seaf = !!R[rid].sea && g.raid.mode === "sea" && isCoastal(t);
     if (!adj && !seaf) continue;
+    // TODO: two answers to "who patronises this people?" — `battleUnits` asks the same question
+    // over a different walk.
     let patron = null;
     for (const q of PLAYERS) if (rank(g, q, rid) >= 2) patron = q;
     if (patron) continue; // a patron closes the bidding — their bands answer calls instead

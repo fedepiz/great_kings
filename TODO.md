@@ -31,11 +31,6 @@ checking an oracle whose value is not derivable from the code under test.
 | `test-economy.js` "nothing is turned away" | sets a stock to 20, adds 5, asserts 25 — no engine code runs, and `before` is never read |
 | `test-economy.js` "no overflow commands survive" | a 6,000-step walk that confirms four deleted command names never appear; `COMMANDS` closure covers this for every name, not four |
 | `test-hash.js` `ok(true, "→ the fingerprint is route-independent…")` | a comment counted as a passing assertion; make it a `console.log` |
-| `test-war.js` "damage walks down the ladder" | the loop applies its own `-2`; no strike code executes, so the engine could stop subtracting and this stays green |
-
-Deleting the last one leaves raid strike damage uncovered — random play fires roughly one strike
-per eight seeds. Replace it with a raid driven through `dispatch` to a strike, asserting damage
-falls on `foremostIn` and is recomputed between blows.
 
 **Delete — an assertion already covers them.**
 
@@ -82,7 +77,7 @@ after their assertion has been seen to fire. Then the rewrites. Then one paramet
 `walk({ seeds, rounds, choose, onState })` to replace the per-file xorshift and `clone`
 copies, and a coverage ratchet over `COMMANDS` and `ACTIONS` keys — a coverage-directed
 `choose` is what reaches `treaty` and `searaid` without a hand-built board, and `endRaid` and
-`stand` are currently reached by no walk at all.
+`stand` are reached by no walk at all — only by `test-strike.js`'s hand-built boards.
 
 **One constraint this work established: a walk finding no counterexample is not a proof.** An
 invariant asserting `strained` against its floor survived 25,000 states of one walk, and another
@@ -115,7 +110,7 @@ builds on it:
 |---|---|---|
 | `bd.capGoods` | `yieldOf` | never written, so the branch is unconditionally `1` |
 | `g.rot` | `nextPlayer`, `finishUpkeep` | maintained and reset, never read |
-| `c.deny` | `commitUnit`, `resolveRaid` | written as `!!u.deny`, and `battleUnits` never sets `u.deny` — so always false, and the filter removes nothing |
+| `c.deny` | `commitUnit`, `defenceStrength` | written as `!!u.deny`, and `battleUnits` never sets `u.deny` — so always false, and the filter removes nothing |
 
 Each is a half-stated rule, not a hook: a per-building yield, a within-year round counter, and a
 unit that takes the field without counting are all rules that would need designing before the
@@ -162,24 +157,15 @@ To decide: whether the two seats want distinct treatments (a persistent "X to ac
 a temporary "Y is answering" state), and whether an interleaved actor should be visible on the
 board as well as in the panel.
 
-## Double-check the combat logic
+## Two answers to "who patronises this people?"
 
-Two parts of a raid's resolution to verify against the rulebook (§9) — not known to be wrong,
-just never checked end to end.
+`battleUnits` and `biddablePeoples` each decide whether a wild people already has an Ally+ patron,
+and they decide it differently: `live(g).find((q) => rank(g, q, rid) >= 2)` takes the FIRST living
+power that qualifies, while `biddablePeoples` loops `for (const q of PLAYERS)` and keeps the LAST,
+over all five rather than the living. Ally is exclusive and forfeit zeroes a court's ties, so the
+two should never disagree today, which is exactly what makes this worth closing before something
+lets them: the question is asked twice and answered by two different walks.
 
-**1. Which works at the defending location can be activated.** What the defence is permitted to
-put in the field, and on what terms: the target's own militia, a protector's reachable units, an
-allied region answering a call, an untapped fortress adding to walls, and the wild peoples
-reached by bidding. `battleUnits`, `fortressDef` and `biddablePeoples` are the places to start.
-
-**2. That a victorious attacker actually gets the two strike outcomes.** Per the rules a strike
-on an UNTAPPED work overruns it — it taps, and a producer surrenders its full yield to the
-attacker — while a strike on an ALREADY-TAPPED work destroys it. Confirm both branches fire, the
-extracted yield is the full amount and reaches the attacker's stores, and destruction applies
-its influence penalty to the foremost. `doStrike` implements the branch and `hostilesIn` gates
-which works are candidates.
-
-Random play reaches strikes rarely — roughly one per eight seeds — so this wants a raid driven
-through `dispatch` to resolution rather than a walk. Note the overlap with the `test-war.js`
-"damage walks down the ladder" entry above, which asserts strike damage without running any
-strike code: one scenario can serve both.
+One of them should be the answer — `patronOf(g, rid)` beside `biddablePeoples` — and the other
+should call it. Nothing about play changes, so the differential should stay 10/10; if it does not,
+the two were already disagreeing and the seed that shows it is the interesting artefact.

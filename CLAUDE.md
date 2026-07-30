@@ -15,9 +15,12 @@ index.html         the page; loads levant/main.js
 levant/
   engine.js        THE RULES. No React, no JSX, no DOM. ~3,000 lines, ~25 exports.
   scenario.js      THE WORLD AS AUTHORED — powers, map, opening position, one JSON-shaped
-                   object. initState validates it and compiles it onto `g.world` (immutable).
+                   object. THE ENGINE SHIPS NO WORLD: whoever starts a game imports this (or
+                   authors another scenario) and passes it to initState, which validates or
+                   throws and compiles it onto `g.world` (immutable).
   app.jsx          THE TABLE. The hot-seat interface. ~530 lines; reads no field off `g`,
-                   imports exactly three functions: view, dispatch, initState.
+                   imports three engine functions (view, dispatch, initState) plus the
+                   scenario it seats — data, not a rule.
   main.jsx         the only file that knows a DOM exists: mounts App.
   table.css        the utility classes app.jsx's layout depends on.
 harness/
@@ -182,6 +185,16 @@ That is expected, and it is not a pass.
 around 1,900 times per 8 seeds and treaty once — so the thin verbs (`treaty`, `searaid`, the
 raid and subversion contests) are pinned by hand in `test-verbs.js`, `test-raid.js` and
 `test-subvert.js` or they get silently broken.
+
+**A fixture is an authored scenario, never a poke.** A suite never writes a field of `g` — a
+hand-poked state is a world no rule produced and no validator saw. Clone the canon and edit it
+in the author's vocabulary (`harness/engine/fixtures.cjs`: `variant`, `seatFirst`, `standing`,
+`addWork`, `setWorks`, `stocks`), seat it through `initState`, and drive the rest by commands.
+Deliberately corrupting a state to prove an assertion can fire is the one exception — that is
+a proof, not a fixture. Reads of `g` in assertions are tolerated until the query door exists;
+see TODO.md. To explore several futures from one position, fork the timeline with `F.fork(g)`
+— the position is copied, the world is shared, because `g.world` is immutable — never with a
+blind deep clone that pays to duplicate what nothing may write.
 
 **Check that your checks can fail.** A guard you have never seen fail is not a guard, it is a
 decoration. Two of this project's tests could not fail — one ended in `process.exit(fail ? 0 :

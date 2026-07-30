@@ -19,14 +19,14 @@
 //  at 10/10 differential seeds unless you meant to change the rules.
 // =====================================================================
 
-import CANON from "./scenario.js";
-
 // ============================ THE WORLD IS SCENARIO DATA ============================
-// The map and the cast are not constants of the engine: they arrive as a SCENARIO —
-// levant/scenario.js is the canon — and live on the state as `g.world`. `worldFrom` is the
-// ONE compile from the author's vocabulary into the engine's, run once at initState; there is
-// no module-level world at all. Every reader takes the world off the state it was given —
-// `const { R, PNAME } = g.world` — so two games may stand on two different boards.
+// THE ENGINE SHIPS NO WORLD. The map and the cast arrive as a SCENARIO, passed to
+// `initState` by whoever starts the game — the table passes levant/scenario.js, the canon;
+// the suites author variants of it. The engine imports nothing: it is the rules, and which
+// world they govern is the caller's choice. `worldFrom` is the ONE compile from the author's
+// vocabulary into the engine's, run once at initState; there is no module-level world at
+// all. Every reader takes the world off the state it was given — `const { R, PNAME } =
+// g.world` — so two games may stand on two different boards.
 //
 // `g.world` IS IMMUTABLE AFTER initState. Nothing may write it, ever — it is the stage, not
 // the position. The fingerprint ignores it for exactly that reason (see NOT_THE_POSITION),
@@ -52,7 +52,8 @@ function worldFrom(sc) {
 // faces an author, and a misauthored scenario seated silently is a broken world at birth.
 function validateScenario(sc) {
   const bad = (m) => { throw new Error("scenario: " + m); };
-  if (!sc || !Array.isArray(sc.powers) || !sc.powers.length) bad("powers are required");
+  if (!sc) bad("a scenario is required — the engine ships no world");
+  if (!Array.isArray(sc.powers) || !sc.powers.length) bad("powers are required");
   if (!Array.isArray(sc.regions) || !sc.regions.length) bad("regions are required");
   const rids = new Set(sc.regions.map((r) => r.id));
   const pids = new Set(sc.powers.map((p) => p.id));
@@ -159,7 +160,7 @@ const BT = {
 };
 
 
-function initState(scenario = CANON) {
+function initState(scenario) {
   validateScenario(scenario);
   const world = worldFrom(scenario);
   const { REG, PLAYERS, HOME, PNAME } = world;
@@ -2915,22 +2916,14 @@ function perish(g, rid, i) {
 // If a new consumer needs a name, add it here deliberately and say who needs it. If you are
 // adding one so the interface can decide whether something is allowed, stop: that answer
 // belongs in `availableCommands`.
-// TRANSITIONAL — the canon world's tables, under their old names, for the one caller that has
-// not yet moved off them: the suites build fixtures against these (until they read the
-// scenario they seed with). The table imports NO world at all — the view carries the map's
-// facts inline — and engine code never reads these either: it reads `g.world`, so a game on
-// another scenario is never touched by them.
-const { R: CANON_R, REG: CANON_REG, PLAYERS: CANON_PLAYERS, HOME: CANON_HOME } = worldFrom(CANON);
-
 export {
   // THE DOORS — the whole API for anything that plays the game.
   initState, dispatch, availableCommands, view, validCmd,
 
-  // THE RULES' OWN TABLE — building types, read by the suites beside the world.
+  // THE RULES' OWN TABLE — building types, read by the suites beside the world. NO WORLD is
+  // exported: the engine ships none, and the world a caller plays on is the scenario it
+  // passed to initState — which it already holds.
   BT,
-
-  // THE WORLD OF THE CANON — transitional, see above.
-  CANON_HOME as HOME, CANON_PLAYERS as PLAYERS, CANON_R as R, CANON_REG as REG,
 
   // THE DIGESTS — same trajectory? (`g.chain`, carried on the state) · same position?
   fingerprint,

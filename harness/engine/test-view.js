@@ -12,6 +12,10 @@
 // =====================================================================
 const path = require("path");
 const M = require(path.join(__dirname, "..", "new.cjs"));
+const F = require("./fixtures.cjs");
+const PLAYERS = F.players();
+// what the authored world says, for holding the view to it
+const SLOTN = Object.fromEntries(F.CANON.regions.map((r) => [r.id, r.slots.length]));
 
 let pass = 0, fail = 0;
 const ok = (c, m, detail) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗", m, detail ? "\n      " + detail : ""); } };
@@ -33,7 +37,7 @@ let states = 0, options = 0, mapRegions = 0;
 let prevStep = null, prevMapOnly = null, stepMoved = 0;
 for (let seed = 1; seed <= 40; seed++) {
   s = seed >>> 0;
-  let g = M.initState();
+  let g = M.initState(F.CANON);
   prevStep = null; prevMapOnly = null;   // each seed is a fresh game: the counter starts over
   for (let step = 0; step < 4000; step++) {
     if (g.round > 20) break;
@@ -69,19 +73,19 @@ for (let seed = 1; seed <= 40; seed++) {
 
           // WHAT IS HERE, not just what may be done here. Because these come through the view
           // rather than off `g`, this walk can hold them to their invariants in every state.
-          const slotCount = (M.REG.find((r) => r.id === rid) || { slots: [] }).slots.length;
+          const slotCount = SLOTN[rid] || 0;
           if (!Array.isArray(place.works) || place.works.length !== slotCount)
             flag("works does not run parallel to the region's slots",
               { rid, works: place.works && place.works.length, slots: slotCount });
           for (const w of place.works || []) {
             if (w.building === null) continue;                    // empty ground is a fact, not a gap
             if (!M.BT[w.building]) flag("works names a building type the engine does not have", { rid, w });
-            if (w.power !== null && !M.PLAYERS.includes(w.power))
+            if (w.power !== null && !PLAYERS.includes(w.power))
               flag("works reports an owner that is not a power (the region-id sentinel leaked)", { rid, w });
             if (typeof w.spent !== "boolean") flag("works does not say whether the year is spent", { rid, w });
           }
           for (const rr of place.relations || []) {
-            if (!M.PLAYERS.includes(rr.power)) flag("relations names a power that is not seated", { rid, rr });
+            if (!PLAYERS.includes(rr.power)) flag("relations names a power that is not seated", { rid, rr });
             if (!RUNGS.has(rr.rung)) flag("relations reports an unknown rung", { rid, rr });
             if (typeof rr.influence !== "number") flag("relations reports no influence", { rid, rr });
           }
@@ -140,13 +144,13 @@ for (let seed = 1; seed <= 40; seed++) {
         if (!clickable.has(key(c))) flag(`a ${c.t} command is on the menu but nowhere on the map`, { cmd: c, chain: g.chain });
       }
       // every region drawn, always, so nothing appears and vanishes under the hand
-      if (Object.keys(mapPan.regions).length !== M.REG.length)
-        flag("the map does not carry every region", { got: Object.keys(mapPan.regions).length, want: M.REG.length });
+      if (Object.keys(mapPan.regions).length !== F.CANON.regions.length)
+        flag("the map does not carry every region", { got: Object.keys(mapPan.regions).length, want: F.CANON.regions.length });
     }
 
     const pool = menu.filter((x) => x.t !== "forfeit");
     if (!pool.length) break;
-    try { g = M.dispatch(JSON.parse(JSON.stringify(g)), pool[Math.floor(rnd() * pool.length)]); }
+    try { g = M.dispatch(F.fork(g), pool[Math.floor(rnd() * pool.length)]); }
     catch (e) { flag("dispatch threw: " + e.message, {}); break; }
   }
 }
@@ -162,9 +166,9 @@ ok(rows.length === 0, "the table and the menu agree, both ways: nothing clickabl
 // All have passed: the only thing on offer is the reckoning. The board must light nothing.
 console.log("\n— the board says nothing can be done when nothing can be done —");
 {
-  let g = M.initState();
+  let g = M.initState(F.CANON);
   let guard = 0;
-  while (!M.PLAYERS.every((q) => g.out[q] || g.passed[q]) && guard++ < 100) {
+  while (!PLAYERS.every((q) => g.out[q] || g.passed[q]) && guard++ < 100) {
     const menu = M.availableCommands(g);
     const pass_ = menu.find((c) => c.t === "pass");
     g = M.dispatch(g, pass_ || menu[0]);

@@ -28,7 +28,6 @@ checking an oracle whose value is not derivable from the code under test.
 | site | what |
 |---|---|
 | `test-economy.js` "state shape" | asserts `pendingOverflow` and `committed` are absent; nothing writes either |
-| `test-economy.js` "nothing is turned away" | sets a stock to 20, adds 5, asserts 25 — no engine code runs, and `before` is never read |
 | `test-economy.js` "no overflow commands survive" | a 6,000-step walk that confirms four deleted command names never appear; `COMMANDS` closure covers this for every name, not four |
 | `test-hash.js` `ok(true, "→ the fingerprint is route-independent…")` | a comment counted as a passing assertion; make it a `console.log` |
 
@@ -52,13 +51,11 @@ checking an oracle whose value is not derivable from the code under test.
 | `test-ownership.js` "a province's works answer whoever holds it" | a six-row `usable` truth table transcribing a three-line function | one property: raising a rung never revokes a command |
 | `test-war.js` "the foremost, and ties" | three hand-built argmax tables | `foremostIn` against a brute-force oracle, every province × every state of a walk |
 
-**Fix — and expect to learn something.** Three checks whose outcome is unknown because none has
+**Fix — and expect to learn something.** Two checks whose outcome is unknown because neither has
 ever been written honestly:
 
 - `test-ownership.js` "markets open to Ties+" asserts `acts.length >= 0`. Write `> 0`. If it
   fails, either the rule is not what the message claims or the fixture supplies no sources.
-- `test-verbs.js` "only warriors sail" asserts `every(r => R[r].coast || true)`. `R[rid].coast`
-  has never existed — coastal is `slots.some(s => s.c)`, see `isCoastal`. Write it and run it.
 - Two disjunctions admit the failure they exist to catch: `test-verbs.js` "the treaty costs a
   command" passes when the activation vanished, and `test-raid.js` "the contest resolves" admits
   three outcomes including nothing having happened. Tighten both.

@@ -10,8 +10,10 @@ levant/main.js.map
 levant/main.css
 levant/main.css.map
 
-# the engine as the suites import it, and the differential's accepted baseline
+# the engine as the suites import it, the canon world as the suites author fixtures from,
+# and the differential's accepted baseline
 harness/new.cjs
+harness/scenario.cjs
 harness/ref.cjs
 
 # scratch copies

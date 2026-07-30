@@ -13,7 +13,8 @@
 // =====================================================================
 const path = require("path");
 const M = require(path.join(__dirname, "..", "new.cjs"));
-const clone = (g) => JSON.parse(JSON.stringify(g));
+const F = require("./fixtures.cjs");
+const fork = F.fork;
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };
 
@@ -34,15 +35,15 @@ function sweep(seeds, rounds) {
   for (const seed of seeds) {
     let s = seed >>> 0;
     const rnd = () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
-    let g = M.initState();
-    let action = [], soFar = [], startState = clone(g);
+    let g = M.initState(F.CANON);
+    let action = [], soFar = [], startState = fork(g);
     for (let i = 0; i < 4000; i++) {
       if (g.round > rounds) break;
       const menu = M.availableCommands(g).filter((c) => !NEVER.has(c.t) && !NOT_AN_ACTION.has(c.t));
       if (!menu.length) {
         const esc = M.availableCommands(g).find((c) => c.t === "pass" || c.t === "endActivation" || NOT_AN_ACTION.has(c.t));
         if (!esc) break;
-        g = M.dispatch(clone(g), esc); action = []; soFar = []; startState = clone(g); continue;
+        g = M.dispatch(fork(g), esc); action = []; soFar = []; startState = fork(g); continue;
       }
       // COHERENT PLAY ONLY. An order describes an INTENTION, so a trace with no intention
       // behind it — a gift toggled on and off, a verb chosen and abandoned — is not something
@@ -56,7 +57,7 @@ function sweep(seeds, rounds) {
         choices = choices.filter((c) => {
           if (c.t !== "verb") return true;
           try {
-            const nx = M.dispatch(clone(g), c);
+            const nx = M.dispatch(fork(g), c);
             return M.availableCommands(nx).some((x) => !NEVER.has(x.t) && x.t !== "verb");
           } catch (e) { return false; }
         });
@@ -64,14 +65,14 @@ function sweep(seeds, rounds) {
       if (!choices.length) {
         const esc = M.availableCommands(g).find((c) => c.t === "endActivation" || c.t === "pass");
         if (!esc) break;
-        g = M.dispatch(clone(g), esc); action = []; soFar = []; startState = clone(g); continue;
+        g = M.dispatch(fork(g), esc); action = []; soFar = []; startState = fork(g); continue;
       }
       const cmd = choices[Math.floor(rnd() * choices.length)];
       const mode = g.mode ? g.mode.v : (g.act ? "verb-choice" : "activate");
       const capBefore = g.act ? g.act.capLeft : null;
       const deskBefore = M.effectiveSeat(g);
       action.push({ cmd, mode }); soFar.push(key(cmd));
-      const next = M.dispatch(clone(g), cmd);
+      const next = M.dispatch(fork(g), cmd);
       const capAfter = next.act ? next.act.capLeft : null;
       const spent = (capBefore != null && capAfter != null && capAfter < capBefore)
         || (g.act && !next.act) || M.effectiveSeat(next) !== deskBefore;
@@ -79,13 +80,13 @@ function sweep(seeds, rounds) {
         n++;
         const order = M.Order.read(action);
         const r = M.Order.commands(startState, order);
-        let byTrace = clone(startState); for (const a of action) byTrace = M.dispatch(clone(byTrace), a.cmd);
-        let byOrder = clone(startState); for (const c of (r.commands || [])) byOrder = M.dispatch(clone(byOrder), c);
+        let byTrace = fork(startState); for (const a of action) byTrace = M.dispatch(fork(byTrace), a.cmd);
+        let byOrder = fork(startState); for (const c of (r.commands || [])) byOrder = M.dispatch(fork(byOrder), c);
         if (r.ambiguous) { ambiguous++; if (notes.length < 5) notes.push(`ambiguous: ${r.ambiguous.map((c) => c.t).join("/")} (verb ${order.verb})`); }
         else if (!r.commands.length) { empty++; if (notes.length < 5) notes.push(`licensed nothing (verb ${order.verb})`); }
         else if (M.fingerprint(byOrder) === M.fingerprint(byTrace)) exact++;
         else { differs++; if (notes.length < 5) notes.push(`different world (verb ${order.verb}, ${r.commands.length} vs ${action.length} commands)`); }
-        action = []; soFar = []; startState = clone(next);
+        action = []; soFar = []; startState = fork(next);
       }
       g = next;
     }
@@ -104,14 +105,14 @@ ok(r.n > 100, `enough actions to be meaningful (${r.n})`);
 ok(r.exact === r.n, "every action the engine can play, an order can describe");
 
 console.log("\n— an order is read from what was done, not from what was said —");
-let g = M.initState();
+let g = M.initState(F.CANON);
 const act = M.availableCommands(g).find((c) => c.t === "activate");
 const o = M.Order.read([{ cmd: act, mode: "activate" }]);
 ok(o.actor && o.actor.rid === act.rid, `the actor is recovered (${o.actor && o.actor.rid})`);
 
 console.log("\n— a wrong order licenses nothing rather than guessing —");
 const nonsense = { actor: { rid: "NOWHERE", i: 0 }, verb: "build", target: { rid: "NOWHERE" } };
-const rr = M.Order.commands(M.initState(), nonsense);
+const rr = M.Order.commands(M.initState(F.CANON), nonsense);
 ok(!rr.commands.length, "an order naming what does not exist produces no commands");
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

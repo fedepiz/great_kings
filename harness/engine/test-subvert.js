@@ -3,28 +3,30 @@
 // array where "ascending by influence" is the rule and wants asserting at construction. The
 // resolution arithmetic below it is an oracle with content and stays.
 const M = require("../new.cjs");
+const F = require("./fixtures.cjs");
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };
-const clone = (g) => JSON.parse(JSON.stringify(g));
-const D = (g, c) => M.dispatch(clone(g), c);
+const fork = F.fork;
+const D = (g, c) => M.dispatch(fork(g), c);
 
 // Kizzuwatna: Hatti 8, Egypt 3, Mitanni 5, Babylon 0. Hatti opens the bidding.
+// The board is AUTHORED, never poked: Hatti seated first, its chancery raised at home, the
+// Kizzuwatna ladder placed exactly. Mitanni also holds a stake at Ugarit, so Kizzuwatna is
+// never Hatti's ONLY subvertable province — the once-per-year check at the foot needs a menu
+// that still offers something, or the absence it asserts on is vacuous.
 function scenario() {
-  let g = M.initState();
-  g.turn = "H";
-  g.rel.H.KIZ = { i: 8, s: "ally", strained: false };
-  g.rel.M.KIZ = { i: 5, s: "friend", strained: false };
-  g.rel.E.KIZ = { i: 3, s: "friend", strained: false };
-  g.rel.B.KIZ = { i: 0, s: "none", strained: false };
-  g.rel.Y.KIZ = { i: 0, s: "none", strained: false };
-  for (const p of M.PLAYERS) g.players[p].stock = { food: 5, bronze: 5, cloth: 5, pottery: 5 };
-  const home = M.HOME.H, slot = g.b[home].findIndex((x) => x === null);
-  g.b[home][slot] = { t: "chancery", o: "H", tap: false };
-  return g;
+  return M.initState(F.variant(
+    F.seatFirst("H"),
+    F.standing("H", "KIZ", "ally", 8),
+    F.standing("M", "KIZ", "friend", 5),
+    F.standing("E", "KIZ", "friend", 3),
+    F.standing("M", "UGA", "friend", 2),
+    F.stocks({ food: 5, bronze: 5, cloth: 5, pottery: 5 }),
+    F.addWork("HAT", { type: "chancery", crown: "H" }),
+  ));
 }
 function open(g) {
-  const act = M.availableCommands(g).find((c) => c.t === "activate" && c.rid === M.HOME.H
-    && g.b[M.HOME.H][c.i] && g.b[M.HOME.H][c.i].t === "chancery");
+  const act = M.availableCommands(g).find((c) => c.t === "activate" && c.rid === "HAT" && c.b === "chancery");
   g = D(g, act);
   g = D(g, { t: "verb", v: "subvert" });
   return D(g, { t: "region", rid: "KIZ" });
@@ -85,9 +87,14 @@ ok(g4.rel.M.KIZ.i === 5 && g4.rel.E.KIZ.i === 0 && g4.rel.H.KIZ.i === 3,
 
 console.log("\n— once per target per year —");
 ok((g1.spent.H.subvert || []).includes("KIZ"), "the year's ledger records the attempt");
-let g5 = clone(g1); g5.turn = "H";
-const again = M.availableCommands(g5).some((c) => c.t === "region" && c.rid === "KIZ");
-ok(!again, "the same province cannot be subverted twice in a year");
+// the table goes round by commands until Hatti's desk comes back, then Hatti tries again
+let g5 = fork(g1);
+for (const q of ["M", "B", "E", "Y"]) g5 = D(g5, { t: "pass" });
+g5 = D(g5, M.availableCommands(g5).find((c) => c.t === "activate" && c.rid === "HAT" && c.b === "palace"));
+g5 = D(g5, { t: "verb", v: "subvert" });
+const offered5 = M.availableCommands(g5).filter((c) => c.t === "region");
+ok(offered5.length > 0, `the verb still offers other provinces (${offered5.length}) — the absence below means something`);
+ok(!offered5.some((c) => c.rid === "KIZ"), "the same province cannot be subverted twice in a year");
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

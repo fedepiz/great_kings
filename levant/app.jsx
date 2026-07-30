@@ -11,15 +11,17 @@ import React, { useState, useRef } from "react";
 // particular nothing that answers "may this be done" — that lives behind `view`, which is the
 // only question this file asks.
 //
-// There is NO world import. The map's own facts — names, colours, coordinates, roads, the
-// ground on each slot — arrive on the view like everything else, because the world is
-// scenario data and may differ from game to game: an import would draw the canon under every
-// scenario. KEEP THIS LIST AT THREE. An imported rule is an invitation to enforce it here,
-// and a rule enforced here is not enforced at all — see CLAUDE.md.
+// The fourth import is DATA, not a rule: the engine ships no world, so the shell that starts
+// a game names the scenario it seats. The map's own facts — names, colours, coordinates,
+// roads, the ground on each slot — still arrive on the view like everything else; CANON is
+// handed to initState and never read for drawing. KEEP THE FUNCTION LIST AT THREE. An
+// imported rule is an invitation to enforce it here, and a rule enforced here is not
+// enforced at all — see CLAUDE.md.
 import { dispatch, initState, view } from "./engine.js";
+import CANON from "./scenario.js";
 
 export default function App() {
-  const [g, setG] = useState(initState);
+  const [g, setG] = useState(() => initState(CANON));
   const upd = (fn) => setG((old) => { const n = JSON.parse(JSON.stringify(old)); fn(n); return n; });
   // ONE QUESTION, ASKED ONCE PER RENDER. `g` is held so it can be handed back to `dispatch`,
   // and is never read from — every fact below comes off `v`. If something is missing from `v`,
@@ -317,7 +319,7 @@ export default function App() {
             <div className="mt-3">
               <div className="flex justify-between items-baseline">
                 <div className="text-sm">Chronicle</div>
-                <button className="text-xs px-2 py-0.5 rounded" style={{ background: "#54492F" }} onClick={() => setG(initState())}>reset</button>
+                <button className="text-xs px-2 py-0.5 rounded" style={{ background: "#54492F" }} onClick={() => setG(initState(CANON))}>reset</button>
               </div>
               <div className="mt-1 p-2 rounded text-xs leading-relaxed" style={{ background: "#241F16", maxHeight: 230, overflowY: "auto", ...mono }}>
                 {chronicle.map((ln, i) => (
@@ -447,7 +449,7 @@ export default function App() {
               <div className="flex justify-between items-baseline mb-1">
                 <div className="text-sm" style={serif}>The chronicle</div>
                 <div className="flex gap-2">
-                  <button className="text-xs px-2 py-0.5 rounded" style={{ background: "#54492F" }} onClick={() => setG(initState())}>reset</button>
+                  <button className="text-xs px-2 py-0.5 rounded" style={{ background: "#54492F" }} onClick={() => setG(initState(CANON))}>reset</button>
                   <button className="text-xs px-2 py-0.5 rounded" style={{ background: "#3A3226", border: "1px solid #6B5B3E" }} onClick={() => setChronOpen(false)}>▾ hide</button>
                 </div>
               </div>

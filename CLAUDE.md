@@ -28,7 +28,7 @@ harness/
   run-all.sh       everything, in one command (`npm test`)
   render-check.jsx does the table draw, at both sizes?
   engine/
-    test-*.js      thirteen suites; the exact assertion count is in the test output
+    test-*.js      fourteen suites; the exact assertion count is in the test output
     fixtures.cjs   authored scenarios and forked timelines — how a suite builds a position
     check-boundary.cjs + boundary-allowlist.txt   THE SEAL: no read past the doors
 great-kings-player-rules.md   the rulebook, current with the engine

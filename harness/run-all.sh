@@ -33,7 +33,7 @@ echo "  harness/new.cjs + harness/scenario.cjs"
 # non-zero exit prints the whole run and stops everything.
 echo "— engine suites —"
 cd harness/engine
-for f in economy ownership war raid strike subvert verbs commands hash orders view query; do
+for f in economy ownership war raid strike subvert verbs commands hash orders view query checks; do
   printf "  %-10s " $f
   if out=$(node test-$f.js 2>&1); then
     echo "$out" | grep "passed," | tail -1

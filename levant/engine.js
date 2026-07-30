@@ -2893,6 +2893,8 @@ export {
 
   // READ BY THE SUITES ONLY. These let a test assert against a rule directly instead of
   // inferring it from play. Nothing in the interface may call them.
+  // TODO: the suites read facts through eleven exported internals, not a door — `query(g, q)`
+  // replaces this whole block; see TODO.md.
   costTapCovered, foodRots, foodStore, foremostIn, infOf, legalTargets,
   specOf, tapYields, upkeepDue, usable, yieldOf,
 };

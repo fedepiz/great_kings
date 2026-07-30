@@ -169,3 +169,72 @@ lets them: the question is asked twice and answered by two different walks.
 One of them should be the answer — `patronOf(g, rid)` beside `biddablePeoples` — and the other
 should call it. Nothing about play changes, so the differential should stay 10/10; if it does not,
 the two were already disagreeing and the seed that shows it is the interesting artefact.
+
+## The suites read facts through eleven exported internals, not a door
+
+The export list ends with a block marked "READ BY THE SUITES ONLY" — `costTapCovered`,
+`foodRots`, `foodStore`, `foremostIn`, `infOf`, `legalTargets`, `specOf`, `tapYields`,
+`upkeepDue`, `usable`, `yieldOf` — and beyond it the suites read `g.rel`, `g.b`, `g.players`,
+`g.raid`, `g.contest`, `g.mode` directly. Every such read couples a test to the state's internal
+shape, and the coupling has already produced the vacuous-pass disease once: `test-verbs.js`
+asserts on `R[rid].coast`, a field that has never existed, and has passed for its whole life.
+
+The fix is a third door beside the two that exist. `availableCommands` answers *"what may I
+do?"*; `view` answers *"what do I show?"*; **`query(g, q)` answers *"what is true?"*** — with
+the same laundering discipline `view` already obeys (the `bd.o` overload never leaves the
+engine).
+
+**The contract**, each clause earned by a scar:
+
+- `q` is plain data — `{ask: "...", ...args}` in, a plain value out. Queries are serialisable,
+  storable, comparable, generable.
+- A `QUERIES` table with one dispatcher over it — the `ACTIONS` pattern. Each entry declares
+  its arg spec; the dispatcher validates against `PLAYERS`/`R`/`GOODS` once, generically.
+- **Total over well-formed queries; throws on malformed ones.** Deliberate contrast with
+  `dispatch`: dispatch faces players and stale worlds, so it refuses politely; query faces test
+  authors, and a typo'd query answering `undefined` is an assertion that cannot fail — the
+  `R[rid].coast` disease.
+- Answers are fresh values, never references into `g` — a returned live row would make the read
+  door a write door.
+- Every answer is computed in one place: an entry delegates to the engine's one computation of
+  the fact (`foremost` → `foremostIn`). No query re-derives a rule.
+
+**The vocabulary, v1** — derived from what the suites read today, nothing speculative:
+
+| domain | ask | args | answer |
+|---|---|---|---|
+| the clock | `year` · `turn` · `desk` · `seated` | — | year; whose turn; whose desk answers next; powers still seated |
+| | `passed` | power | bool |
+| the ladder | `influence` | power, region | 0..n |
+| | `standing` | power, region | `none·friend·ally·subject·home` |
+| | `strained` | power, region | bool |
+| | `foremost` | region | powers, ties included |
+| | `patron` | region | a wild people's Ally+ patron, or null |
+| the ground | `works` | region | `[{slot, type, owner, tapped, yield, answers}]` — owner a power or null; `answers` a power or `"province"` |
+| | `coastal` · `neighbours` | region | bool; region ids |
+| the stores | `stock` | power, good? | n, or the whole `{food, bronze, cloth, pottery}` |
+| | `foodStore` · `upkeepDue` | power | the store's ceiling; `{food: n}` |
+| the engagement | `engagement` | — | null, or `{kind: raid·subversion, phase, region}` |
+| | `raid` | — | null, or `{target, attackers, mustered, strikes}` |
+| | `contest` | — | null, or `{region, turnOrder, parties, lots}` |
+
+`patron` grows `patronOf(g, rid)`, which closes "Two answers to who patronises this people?"
+above. `works.answers` speaks `checkWorld`'s own phrase, so invariants written over queries
+read like the rulebook.
+
+**Deliberately absent:** legality — `availableCommands` IS that door, and a `may(power, verb)`
+query for a power not at the desk would take a second rules engine; the chronicle — the
+`said(g, /…/)` greps are a smell to retire, not enshrine; the digests — already doors.
+`legalTargets` is the one awkward customer: leave it exported until the test purge above
+decides its readers' fate.
+
+**Its own proof:** a `test-query.js` that imports only `initState`, `dispatch`, `query` —
+drive to a known position with commands, ask, compare — plus one cross-oracle: `foremost(r)` ≡
+argmax over `influence(p, r)`, two queries answered by different internal paths, so agreement
+means something. Scheduling (every command, every turn, at the end, on a sample) and
+invariants-as-data (`{name, when, given, holds}`, predicates plain JS until three of them show
+a shape worth a combinator) live in the harness, not the engine.
+
+Landing it is a pure addition — the differential stays 10/10. Done means the "READ BY THE
+SUITES ONLY" export block deletes, and the test rewrites above target queries instead of
+internals.

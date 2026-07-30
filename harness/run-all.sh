@@ -25,11 +25,15 @@ cd harness/engine
 suites_failed=0
 for f in economy ownership foremost raid subvert verbs commands hash orders view; do
   printf "  %-10s " $f
-  out=$(node test-$f.js 2>&1); code=$?
-  echo "$out" | grep "passed," | tail -1
+  # `out=$(...)` under `set -e` aborts the script on a non-zero status BEFORE the next line
+  # can read $?, which would have made everything below here unreachable — a diagnostic that
+  # cannot print is the same bug this loop was written to fix. `if !` keeps set -e out of it.
+  code=0
+  out=$(node test-$f.js 2>&1) || code=$?
+  echo "$out" | grep "passed," | tail -1 || echo "(no summary line — the suite did not finish)"
   if [ $code -ne 0 ]; then
     suites_failed=1
-    echo "$out" | grep "✗" | sed 's/^/      /'
+    echo "$out" | grep -E "✗|Error" | head -20 | sed 's/^/      /'
     echo "      ^ test-$f.js exited $code"
   fi
 done

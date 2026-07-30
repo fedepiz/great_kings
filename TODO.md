@@ -133,69 +133,6 @@ To decide: whether the two seats want distinct treatments (a persistent "X to ac
 a temporary "Y is answering" state), and whether an interleaved actor should be visible on the
 board as well as in the panel.
 
-## `forfeit` cannot be told apart from its own confirmation
-
-`forfeit` is the only two-word command: the first arms it, the second carries it out, and any
-`pass` disarms it. But `availableCommands` offers the identical `{t:"forfeit"}` in both states,
-so nothing driving the game through `dispatch` can tell the arming word from the fatal one
-without reading `g.confirmForfeit` — which the interface is not allowed to do, and which `view`
-does not report.
-
-For the hot seat this is harmless: the table's own click sequence supplies the two words. It
-becomes a real defect the moment anything else drives the game. The fix is one of:
-
-- have `availableCommands` distinguish them (`{t:"forfeit", confirm:true}`), which makes the
-  distinction visible to `cmdKey`, the chain, and every caller; or
-- report the armed state as a fact on `view`, and leave the command alone.
-
-The first is the better shape — the menu should say what a command will do — but it changes the
-command surface, so it wants pinning in `test-commands.js` first.
-
-## The table never says which power is acting, and control interleaves
-
-The interface gives no clear statement of whose word the next command is. It matters most in the
-cases where the desk is NOT the power whose turn it is — control passes mid-action to a raid's
-defenders one at a time, to each participant in a subversion's bidding, and to whoever must
-choose abandonments in a famine. A player looking at a muster prompt has to infer from the
-panel's own label which court is being asked.
-
-The facts are already reported; this is a table-side change. `view` returns both `seat` (whose
-turn it is) and `effectiveSeat` (whose desk the next command comes from). `app.jsx:33` takes
-`const p = v.seat` and never reads `effectiveSeat` at all — so anything the table tints or
-labels from `p` speaks for the turn-holder even while another court is acting. Worth checking
-what currently keys off `p`: the notice colour, the `subject.self` highlight on the power cards,
-and the title block.
-
-To decide: whether the two seats want distinct treatments (a persistent "X to act" line, versus
-a temporary "Y is answering" state), and whether an interleaved actor should be visible on the
-board as well as in the panel.
-
-## Six internals still leave by the suites-only block, not the query door
-
-`query(g, q)` is open — the third door beside `availableCommands` and `view`, one `QUERIES`
-entry per ask, validate-or-throw, answers as values; `test-query.js` is its proof. Five of the
-eleven suites-only exports died with their last readers. Each of the six that remain is bound
-to a test the tests section above already judges:
-
-| export | last reader | dies with |
-|---|---|---|
-| `costTapCovered`, `specOf`, `tapYields` | `test-economy` "a sourcing must actually pay" | its deletion — `checkMenu`'s `commitTaps` biconditional covers it |
-| `foodRots` | `test-economy` "what winter takes" | that section's rewrite, or a `foodRots` ask if the fact earns one |
-| `usable` | `test-ownership`'s `usable` truth table | the rewrite to "raising a rung never revokes a command" |
-| `legalTargets` | `test-view`'s closing contrast | nothing soon — that block is the documented proof of WHY the map must not read it |
-
-Direct reads of `g` still standing in the suites, each a vocabulary decision not yet made:
-the year's ledger (`g.spent`) in `test-subvert`, a commitment's terms and price
-(`g.raid.atk[].terms`/`paidInf`/`defC`) in `test-strike`, the activation budget
-(`g.act.capLeft`) in `test-verbs` and `test-commands`, and the chronicle greps
-(`said(g, /…/)`) that the tests section already sentences. Extend the vocabulary only when a
-reader earns it — an ask nobody asks is an export with no caller, one door over.
-
-Scheduling (every command, every turn, on a sample) and invariants-as-data
-(`{name, when, given, holds}`) remain harness work, waiting on the `walk()` consolidation in
-the tests section; `test-query.js` carries the two invariants written so far (foremost ≡
-argmax, contests ascend) inline.
-
 ## CHECKS: the rules as executable specification
 
 `harness/engine/test-checks.js` is the successor to the retired differential and the

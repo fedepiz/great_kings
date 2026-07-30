@@ -3,8 +3,7 @@
 // or refused — never throw. This fuzzes every known command shape against a wide spread of
 // live states, including states the command has no business arriving in.
 const M = require("../new.cjs");
-let pass = 0, fail = 0;
-const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };
+const { ok, done } = require("./assert.js")();
 const clone = (g) => JSON.parse(JSON.stringify(g));
 
 // every command shape the engine can emit, harvested from real play
@@ -103,5 +102,4 @@ console.log("\n— a court may always set down what it has picked up —");
   } else console.log("   – no build target from the opening; skipped");
 }
 
-console.log(`\n${pass} passed, ${fail} failed\n`);
-process.exit(fail ? 1 : 0);
+done();

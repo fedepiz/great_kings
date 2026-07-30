@@ -2,8 +2,7 @@
 // (6 seeds x 30 rounds fired 3 bids and 1 strike). These drive a real raid on Qadesh, which
 // borders two wild peoples, through actual dispatch commands, and pin the bidding outcomes.
 const M = require("../new.cjs");
-let pass = 0, fail = 0;
-const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };
+const { ok, done } = require("./assert.js")();
 const clone = (g) => JSON.parse(JSON.stringify(g));
 const has = (g, pred) => M.availableCommands(g).some(pred);
 
@@ -84,5 +83,4 @@ console.log("\n— calling off the raid returns the attacker's offerings —");
 let g7 = M.dispatch(clone(g2), { t: "calloff" });
 ok(g7.players.B.stock.bronze === before && !g7.raid, "call-off refunds what was laid and clears the raid");
 
-console.log(`\n${pass} passed, ${fail} failed\n`);
-process.exit(fail ? 1 : 0);
+done();

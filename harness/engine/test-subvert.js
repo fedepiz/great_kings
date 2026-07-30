@@ -1,6 +1,5 @@
 const M = require("../new.cjs");
-let pass = 0, fail = 0;
-const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };
+const { ok, done } = require("./assert.js")();
 const clone = (g) => JSON.parse(JSON.stringify(g));
 const D = (g, c) => M.dispatch(clone(g), c);
 
@@ -85,5 +84,4 @@ let g5 = clone(g1); g5.turn = "H";
 const again = M.availableCommands(g5).some((c) => c.t === "region" && c.rid === "KIZ");
 ok(!again, "the same province cannot be subverted twice in a year");
 
-console.log(`\n${pass} passed, ${fail} failed\n`);
-process.exit(fail ? 1 : 0);
+done();

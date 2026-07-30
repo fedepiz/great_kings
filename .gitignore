@@ -6,6 +6,14 @@ package-lock.json
 harness/new.cjs
 harness/ref.cjs
 
-# scratch copies
-*.bak
+# THE PUBLISHED GAME. A build output of build-game.js, which overwrites it on every build and
+# stamps it with a timestamp — so committing it meant a 184KB diff on every rebuild, recording
+# nothing but the clock. run-all.sh builds it as its first step, before the smoke renders
+# import it, so nothing needs the committed copy. Run `npm run build` to get one.
+levant-prototype-v25.jsx
+
+# published artifacts: the orders bench, and anything else built for upload
+dist/
+
+# scratch copies (*.bak* covers *.bak)
 *.bak*

@@ -3,4 +3,7 @@
 # not a corpus — so it makes its own, and cannot go stale.
 set -e
 cd "$(dirname "$0")/bench"
-node build-bench.js "${1:-/mnt/user-data/outputs/orders-bench.jsx}"
+# Destination: an explicit argument, else GREAT_KINGS_PUBLISH_BENCH, else dist/ inside the
+# repo — build-bench.js resolves it. This used to hardcode /mnt/user-data/outputs/, the
+# sandbox the project was written in, and so failed on every clone.
+node build-bench.js "$@"

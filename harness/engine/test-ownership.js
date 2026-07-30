@@ -1,6 +1,5 @@
 const M = require("../new.cjs");
-let pass = 0, fail = 0;
-const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };
+const { ok, done } = require("./assert.js")();
 const clone = (g) => JSON.parse(JSON.stringify(g));
 const BTx = M.BT, R = M.R;
 
@@ -79,5 +78,4 @@ g6.rel.M[foreign] = { i: 10, s: "subject", strained: false };
 const atSubject = M.foodStore(g6, "M");
 ok(atFriend === 1 && atSubject === 3, `a granary counts only inside your writ (Friend ${atFriend}, Subject ${atSubject})`);
 
-console.log(`\n${pass} passed, ${fail} failed\n`);
-process.exit(fail ? 1 : 0);
+done();

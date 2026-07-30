@@ -31,11 +31,17 @@ const M = require(path.join(__dirname, "..", "new.cjs"));
 const clone = (g) => JSON.parse(JSON.stringify(g));
 const R = M.R, BT = M.BT, PNAME = M.PNAME, GOODS = M.GOODS;
 
-// commands that undo, abandon or re-open a choice: never part of a plan
-const BACKTRACK = new Set(["srcBack", "tradeCancel", "cancelActivation", "bidTake", "calloff", "endActivation", "pass", "forfeit"]);
+// Commands that undo, abandon or re-open a choice: never part of a plan — and the identity
+// of a command. Both live in the engine, beside the commands they describe. They were copied
+// into three harness files apiece and agreed only because they were edited with one regex.
+
+// Which engine the corpus was generated against, stamped into meta so check-chain.js can
+// prove it rather than compare mtimes. `cli()` fills it in; it stays null in the published
+// bench, which has no filesystem to read and carries the engine inline anyway.
+let ENGINE_HASH = null;
 
 // ---------------------------------------------------------------- walk
-const key = (c) => JSON.stringify([c.t, c.rid ?? "", c.i ?? "", c.v ?? "", c.bt ?? "", c.good ?? "", c.side ?? "", c.pid ?? ""]);
+const BACKTRACK = M.ORDER_NEVER, key = M.cmdKey;
 function rng(seed) { let s = seed >>> 0; return () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; }
 
 // Play forward, recording every command. Activations are cut out afterwards.
@@ -630,6 +636,11 @@ function main(opts) {
     meta: {
       generated: new Date().toISOString(),
       generator: "gen-corpus.js",
+      // WHICH ENGINE THIS WAS GENERATED AGAINST. The build-order checks in check-chain.js
+      // compare mtimes, which say nothing on a fresh clone — every file shares one timestamp
+      // — and nothing at all about content. A reworded chronicle line once left the pack
+      // carrying prose the engine no longer produced, and every count still matched.
+      engineHash: ENGINE_HASH,
       note: "Teacher-forced: the harness always advances by `oracle`, never by the candidate's pick.",
       seeds: SEEDS,
       registers: ["template", "prose", "loose"],
@@ -651,6 +662,9 @@ function main(opts) {
 
 // ---- the command line: the only part that touches the disk ----
 function cli() {
+  ENGINE_HASH = require("crypto").createHash("sha256")
+    .update(fs.readFileSync(path.join(__dirname, "..", "..", "levant", "engine.js")))
+    .digest("hex").slice(0, 16);
   const corpus = main();
   const allPos = corpus.cases.flatMap((c) => c.positions);
   const byClass = corpus.meta.positionsByClass, byMode = corpus.meta.positionsByMode;

@@ -30,6 +30,8 @@ gen = gen.slice(0, gen.indexOf("// ---- the command line"));          // drop th
 gen = gen.replace(/\bM\./g, "");                                      // everything is in scope here
 // the generator pulls a few engine names into locals; in one file they are already here
 gen = gen.replace(/^const R = R, BT = BT, PNAME = PNAME, GOODS = GOODS;$/m, "");
+// `const BACKTRACK = ORDER_NEVER, key = cmdKey;` survives the M.-stripping as a plain alias
+// of two engine names, and the pack renderer below relies on it being in scope. Leave it.
 gen = gen.replace(/^const clone = .*$/m, "const cloneG = (g) => JSON.parse(JSON.stringify(g));");
 gen = gen.replace(/\bclone\(/g, "cloneG(");
 
@@ -40,7 +42,6 @@ ren = ren.slice(0, ren.indexOf("// ---- the command line"));
 ren = ren.replace(/\bM\./g, "");
 ren = ren.replace(/^const clone = .*$/m, "");
 ren = ren.replace(/\bclone\(/g, "cloneG(");
-ren = ren.replace(/^const key = .*$/m, "");        // the generator already defines it
 ren = ren.replace(/\bbare\(/g, "bareCmd(");
 // the renderer's own helpers live above the slice point; everything else it needs
 // (BACKTRACK, key, cloneG) is already in scope from the generator
@@ -70,7 +71,13 @@ ${ren}
 ${bench.replace(/^import React[^\n]*\n/, "")}
 `;
 
-const dest = process.argv[2] || "/mnt/user-data/outputs/orders-bench.jsx";
+// WHERE THE ARTIFACT LANDS. This used to default to /mnt/user-data/outputs/ — the sandbox
+// this project was written in, which exists nowhere else, so `./harness/inject.sh` failed
+// outright on a clone. The default is now inside the repo; GREAT_KINGS_PUBLISH_BENCH points
+// it at wherever you upload from, and an explicit argument still wins over both.
+const dest = process.argv[2] || process.env.GREAT_KINGS_PUBLISH_BENCH
+  || path.join(ROOT, "dist", "orders-bench.jsx");
+fs.mkdirSync(path.dirname(dest), { recursive: true });
 fs.writeFileSync(dest, out);
 console.log("built", dest, (fs.statSync(dest).size / 1024).toFixed(0) + "KB");
 console.log("  engine core   :", (core.length / 1024).toFixed(0) + "KB");

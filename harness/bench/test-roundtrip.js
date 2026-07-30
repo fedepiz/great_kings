@@ -15,8 +15,9 @@ const path = require("path");
 const M = require(path.join(__dirname, "..", "new.cjs"));
 const corpus = require(path.join(__dirname, "orders-corpus.json"));
 const clone = (g) => JSON.parse(JSON.stringify(g));
-const BACKTRACK = new Set(["srcBack", "tradeCancel", "cancelActivation", "bidTake", "calloff", "endActivation", "pass", "forfeit"]);
-const K = (c) => JSON.stringify([c.t, c.rid ?? "", c.i ?? "", c.v ?? "", c.bt ?? "", c.good ?? "", c.pid ?? ""]);
+// This file's own copy of the key omitted `c.side`, so it could not tell the two sides of a
+// contest apart. The engine's `cmdKey` names every field that changes what a command does.
+const BACKTRACK = M.ORDER_NEVER, K = M.cmdKey;
 // EQUIVALENCE IS ABOUT THE WORLD, NOT THE ROUTE — and the engine now says so directly.
 const worldOf = (g) => M.fingerprint(g);
 

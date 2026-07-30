@@ -1,6 +1,9 @@
+// WHO ANSWERS FOR A PROVINCE. `foremostIn` picks the power with most influence in a region —
+// the one a raid's blows land on, and the one a subversion prices its damage from. This was
+// called test-war.js, which promised a suite it did not contain: the war itself is covered by
+// test-raid.js and test-subvert.js, and nothing here plays one. It tests the standing ladder.
 const M = require("../new.cjs");
-let pass=0, fail=0;
-const ok=(c,m)=>{ if(c){pass++;console.log("  ✓",m);} else {fail++;console.log("  ✗ FAIL:",m);} };
+const { ok, done } = require("./assert.js")();
 
 console.log("\n— the foremost, and ties —");
 let g = M.initState();
@@ -35,5 +38,4 @@ for (let k=0;k<3;k++){
 ok(seq[0]==="H(6)" && seq[1]==="E(5)" && seq[2]==="H(4)",
    `three strikes walk the ladder: ${seq.join(" → ")}`);
 
-console.log(`\n${pass} passed, ${fail} failed\n`);
-process.exit(fail?1:0);
+done();

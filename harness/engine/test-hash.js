@@ -2,8 +2,7 @@
 // Coverage for THE WORLD HASH — the core's protection against a command written against a
 // world that no longer exists. This is what lets slow agents act safely on shared state.
 const M = require("../new.cjs");
-let pass = 0, fail = 0;
-const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };
+const { ok, done } = require("./assert.js")();
 const clone = (g) => JSON.parse(JSON.stringify(g));
 const first = (g) => M.availableCommands(g).find((c) => c.t !== "forfeit");
 const K = (c) => JSON.stringify([c.t, c.rid ?? "", c.i ?? "", c.v ?? "", c.bt ?? "", c.good ?? "", c.pid ?? ""]);
@@ -113,5 +112,4 @@ for (let i = 0; i < 900; i++) {
 }
 ok(broke === 0, `wiping the record never changed a legal move (${checked} states)`);
 
-console.log(`\n${pass} passed, ${fail} failed\n`);
-process.exit(fail ? 1 : 0);
+done();

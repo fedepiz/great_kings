@@ -1060,7 +1060,11 @@ function orderCommands(g0, order, limit = 20) {
   }
   return { commands, done: true };
 }
-// commands that undo or abandon: never part of an order
+// Commands that undo or abandon: never part of an order, and never a step the bench scores.
+// This set had five copies — one here and four in the harness, under two different names
+// (`BACKTRACK` in the bench, `NEVER` in test-orders.js). check-chain.js grew a check to
+// assert the copies still agreed textually, which is the tell that they should not have been
+// copies. Exported, so there is one list and the check is unnecessary.
 const ORDER_NEVER = new Set(["srcBack", "tradeCancel", "cancelActivation", "bidTake", "calloff", "endActivation", "pass", "forfeit"]);
 // Which commands the order names as members of a SET rather than as a single choice.
 function orderSetShaped(c, mode) {
@@ -2165,7 +2169,11 @@ function commitSourceTaps(g) {
   }
   m.paid = costTakePaid(specOf(m), m, yields);
   const spill = GOODS.filter((t) => yields[t] > 0);
-  g.log.unshift(`${R[m.tapRegion].n} sponsors the ${m.kind}: ${m.paid.join(", ")}${spill.length ? "; what the yield exceeded stays with the province" : ""}.`);
+  // "what the yield exceeded stays with the province" — the old wording — read as though the
+  // surplus went somewhere and might be reclaimed. It goes nowhere. A farm's yield cannot be
+  // split, so anything past the bill is simply unused, and saying otherwise misled this
+  // file's own author into filing two bugs that were the mechanism working as designed.
+  g.log.unshift(`${R[m.tapRegion].n} sponsors the ${m.kind}: ${m.paid.join(", ")}${spill.length ? "; the rest of the yield is wasted" : ""}.`);
   finishSourcing(g);
 }
 function stockCovers(g, p, m) { return costStockCovers(specOf(m), m, g.players[p].stock); }
@@ -2649,32 +2657,42 @@ function perish(g, rid, i) {
 
 // ------------------------------------------------------------------
 export {
-  view, foodRots,
-  ACTIONS, ADJ, ANNEX_ACTORS, BT, COASTAL, FLOOR,
-  GOODS, HOME, NB, NOT_THE_WORLD, ORDER_NEVER, Order,
-  PALACE_VERBS, PCOL, PLAYERS, PNAME, R, RANK,
-  REG, SLETTER, TRADE, UNGATED, activatable, activeB,
-  actorKind, advanceChain, applyCommand, autoMuster, available, availableCommands,
-  basketOf, battleUnits, beginActivation, bidDominates, biddablePeoples, buildSlotFor,
-  callable, canFeedBuild, canPayGood, canSource, canonical, capacityOf,
-  clickRegion, clickSlot, climbText, cmdKey, commitSourceTaps, commitUnit,
-  contestActor, contestBasket, contestLay, contestOpen, contestPartyOf, contestRefund,
-  contestWinner, costCaption, costShortfall, costStockCovers, costStockPayFixed, costTakePaid, costTapCovered, tapYields,
-  costTapDead, currentDefender, defenceIdx, defenceOrder, defendersOf, describeCmd,
-  diploReach, dispatch, doStrike, effectiveSeat, eligibleAttackers, eligibleDefenders,
-  endActivation, endRaid, entreatRemark, evictOrgans, executeBuild, fingerprint,
-  finishSourcing, finishUpkeep, foodStore, foremostIn, forfeit, fortressDef,
-  gain, hasActive, hasAnnex, hostilesIn, inCommand, infOf,
-  initState, isActingBuilding, isCoastal, isCommitted, isCrown, launchRaid,
-  legalBuildTypes, legalTargets, live, mapOnlyStep, markUsed, mercRegions,
-  myAnnexes, myPalaces, nextDefender, nextPlayer, orderAllows, orderCommands,
-  orderMark, orderRead, orderSetShaped, others, overland, overseasPorts,
-  pendingGiftCount, perish, placeBuild, portIn, producersOf, progressLine,
-  raidStrength, rank, rdist, reach, readyB, regionTapSum,
-  rejectReason, relationsUpkeep, resolveRaid, resolveSubversion, runUpkeep, seated,
-  setStatus, sideList, sidePlayer, sourceStockGifts, sourceStockUnit, specOf,
-  spend, stockCovers, stockSum, tapProducers, tapRegionsOf, tapSum,
-  toggleSourceTap, toggleUnit, tradeAfford, tradeSeat, tradeSourcesExist, uncommitUnit,
-  unitPrice, unitReaches, upkeepDue, usable, usedOn, validCmd,
-  verbsOf, works, yieldOf,
+  // THE ENGINE'S PUBLIC SURFACE — only what a consumer actually reaches for.
+  //
+  // This block used to carry 163 names; 130 of them were internal machinery no caller had
+  // ever named, advertised as API. That is the hazard app.jsx records above its own import
+  // list — "an unused import of a rule is an invitation to enforce it here" — one level up,
+  // held open for every consumer at once. `clickRegion`, `executeBuild`, `resolveRaid` and
+  // `runUpkeep` are how a second front end would reconstruct the rules instead of asking
+  // `availableCommands`, which is this project's recurring bug with the door left ajar.
+  //
+  // Trimming costs the published artifacts nothing: build-game.js and build-bench.js both
+  // slice this block off and inline the file, where everything is in scope regardless.
+  //
+  // To add a name, export it deliberately — and ask first whether the answer it gives
+  // belongs in `availableCommands` or `view` instead.
+
+  // the world, as it is named and drawn
+  BT, GOODS, HOME, NB, PCOL, PLAYERS, PNAME, R, REG, SLETTER,
+
+  // the four doors: what may be done, what is shown, do one thing, start over
+  availableCommands, view, dispatch, initState,
+
+  // the pivot between commands and intent
+  Order, ORDER_NEVER,
+
+  // the identity of a command, and the two digests
+  cmdKey, fingerprint, validCmd,
+
+  // prose for a model, and for the scribe's prompt
+  describeCmd, progressLine,
+
+  // what the table and the harness ask about a position
+  effectiveSeat, live, mapOnlyStep, legalTargets,
+
+  // the economy, as the suites interrogate it
+  costTapCovered, foodRots, foodStore, specOf, tapYields, upkeepDue, usable, yieldOf,
+
+  // standing, and who answers for a province
+  foremostIn, infOf,
 };

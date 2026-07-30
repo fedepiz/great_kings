@@ -17,8 +17,7 @@ const M = require(path.join(__dirname, "..", "new.cjs"));
 const clone = (g) => JSON.parse(JSON.stringify(g));
 const corpus = require(path.join(__dirname, "orders-corpus.json"));
 
-const BACKTRACK = new Set(["srcBack", "tradeCancel", "cancelActivation", "bidTake", "calloff", "endActivation", "pass", "forfeit"]);
-const key = (c) => JSON.stringify([c.t, c.rid ?? "", c.i ?? "", c.v ?? "", c.bt ?? "", c.good ?? "", c.side ?? "", c.pid ?? ""]);
+const BACKTRACK = M.ORDER_NEVER, key = M.cmdKey;   // one list, one identity — see engine.js
 
 // rebuild a contest case's fixtures exactly as the generator laid them
 function applyFixtures(g, setup) {

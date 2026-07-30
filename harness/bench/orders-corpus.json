@@ -1,7 +1,8 @@
 {
  "meta": {
-  "generated": "2026-07-29T15:17:16.317Z",
+  "generated": "2026-07-30T07:43:58.386Z",
   "generator": "gen-corpus.js",
+  "engineHash": "1dd12cb69194990f",
   "note": "Teacher-forced: the harness always advances by `oracle`, never by the candidate's pick.",
   "seeds": [
    12345,

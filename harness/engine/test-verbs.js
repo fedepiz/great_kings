@@ -1,8 +1,7 @@
 // Coverage for the verbs random play barely lands: treaty (1 landing in 8 seeds x 30 rounds)
 // and searaid (1). These must be pinned BEFORE either verb moves into the ACTIONS table.
 const M = require("../new.cjs");
-let pass = 0, fail = 0;
-const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };
+const { ok, done } = require("./assert.js")();
 const clone = (g) => JSON.parse(JSON.stringify(g));
 const D = (g, c) => M.dispatch(clone(g), c);
 const openPalace = (g, p) => {
@@ -94,5 +93,4 @@ if (seaTargets.length) {
      "and it opens an unbound contest, refundable until the launch");
 } else { ok(false, "no sea target available to open"); }
 
-console.log(`\n${pass} passed, ${fail} failed\n`);
-process.exit(fail ? 1 : 0);
+done();

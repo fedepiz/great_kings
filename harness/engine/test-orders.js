@@ -14,11 +14,10 @@
 const path = require("path");
 const M = require(path.join(__dirname, "..", "new.cjs"));
 const clone = (g) => JSON.parse(JSON.stringify(g));
-let pass = 0, fail = 0;
-const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };
+const { ok, done } = require("./assert.js")();
 
 const key = (c) => JSON.stringify([c.t, c.rid ?? "", c.i ?? "", c.v ?? "", c.bt ?? "", c.good ?? "", c.pid ?? ""]);
-const NEVER = new Set(["srcBack", "tradeCancel", "cancelActivation", "bidTake", "calloff", "endActivation", "pass", "forfeit"]);
+const NEVER = M.ORDER_NEVER;   // the engine's own list — this was a verbatim sixth copy
 // NOT ACTIONS AT ALL. The year closing, a famine's abandonments, and raising a new palace
 // when the last one is lost are the world's doing or a forced recovery — not something a
 // court ORDERS. No order describes them, and none should be asked to.
@@ -115,5 +114,4 @@ const nonsense = { actor: { rid: "NOWHERE", i: 0 }, verb: "build", target: { rid
 const rr = M.Order.commands(M.initState(), nonsense);
 ok(!rr.commands.length, "an order naming what does not exist produces no commands");
 
-console.log(`\n${pass} passed, ${fail} failed\n`);
-process.exit(fail ? 0 : 0);
+done();

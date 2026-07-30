@@ -18,8 +18,7 @@
 const path = require("path");
 const M = require(path.join(__dirname, "..", "new.cjs"));
 
-let pass = 0, fail = 0;
-const ok = (c, m, detail) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗", m, detail ? "\n      " + detail : ""); } };
+const { ok, done } = require("./assert.js")();
 
 // ---- a seeded walk, sampling view(g) at every state along the way ----
 let s = 0;
@@ -128,5 +127,4 @@ console.log("\n— the board says nothing can be done when nothing can be done �
   console.log(`      (legalTargets still reports ${legacy.slots.size} activatable slot(s) here — which is why the map may not ask it)`);
 }
 
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+done();

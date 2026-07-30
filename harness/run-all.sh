@@ -15,12 +15,26 @@ if [ ! -f harness/ref.cjs ]; then
 else
   ./harness/engine/diff.sh
 fi
+# A SUITE'S EXIT CODE MUST REACH THIS SCRIPT. Piping into grep threw it away: the pipeline's
+# status is grep's, so `set -e` saw success no matter what the suite returned, and a red suite
+# would have been reported as a line of text and nothing more. Two holes, one on each side —
+# test-orders.js had also drifted to `process.exit(fail ? 0 : 0)` and could not report a
+# failure even if this loop had been listening. Both are closed; keep them that way.
 echo "— engine suites —"
 cd harness/engine
-for f in economy ownership war raid subvert verbs commands hash orders view; do
-  printf "  %-10s " $f; node test-$f.js 2>&1 | grep "passed," | tail -1
+suites_failed=0
+for f in economy ownership foremost raid subvert verbs commands hash orders view; do
+  printf "  %-10s " $f
+  out=$(node test-$f.js 2>&1); code=$?
+  echo "$out" | grep "passed," | tail -1
+  if [ $code -ne 0 ]; then
+    suites_failed=1
+    echo "$out" | grep "✗" | sed 's/^/      /'
+    echo "      ^ test-$f.js exited $code"
+  fi
 done
 cd ../..
+[ $suites_failed -eq 0 ] || { echo "FAILED — an engine suite is red"; exit 1; }
 # THE SOURCES MUST COMPILE ON THEIR OWN. build-game.js strips the imports before it
 # concatenates, so a fault in the import block never reaches the built file and every check
 # downstream passes. app.jsx imported `view` TWICE and nothing noticed: the artifact was
@@ -32,14 +46,23 @@ for f in levant/engine.js levant/app.jsx; do
     then echo "  $f: compiles"
     else echo "  $f: BROKEN"; sed 's/^/    /' /tmp/srcerr; exit 1; fi
 done
-echo "— the PUBLISHED artifacts compile and render —"
-for f in /mnt/user-data/outputs/levant-prototype-v25-core.jsx /mnt/user-data/outputs/orders-bench.jsx; do
-  [ -f "$f" ] || continue
-  cp "$f" /tmp/pub-check.jsx
-  if npx esbuild /tmp/pub-check.jsx --loader:.jsx=jsx --outfile=/tmp/pub-check.js >/dev/null 2>&1
-    then echo "  $(basename $f): compiles"
-    else echo "  $(basename $f): BROKEN — do not upload"; fi
-done
+# A GUARD THAT CANNOT FIRE IS WORSE THAN NO GUARD. This block used to look for
+# /mnt/user-data/outputs/levant-prototype-v25-core.jsx — a sandbox path, under a filename no
+# build in this repo has ever produced — and `continue` past it in silence. It ran on every
+# machine and checked nothing, while reading like the artifact was covered.
+#
+# The game itself is covered below: the smoke renders import the built file. What is left is
+# the bench, which is built separately, so say plainly whether it was checked.
+echo "— the published BENCH compiles —"
+BENCH="${GREAT_KINGS_PUBLISH_BENCH:-dist/orders-bench.jsx}"
+if [ -f "$BENCH" ]; then
+  if npx esbuild "$BENCH" --loader:.jsx=jsx --bundle --outfile=/dev/null --external:react >/dev/null 2>/tmp/bencherr
+    then echo "  $BENCH: compiles"
+    else echo "  $BENCH: BROKEN — do not upload"; sed 's/^/    /' /tmp/bencherr; exit 1; fi
+else
+  echo "  not built, so nothing was checked: $BENCH"
+  echo "  run ./harness/inject.sh to build it"
+fi
 # NEVER hide the build, and never run a stale bundle. Both were true here once: a duplicate
 # declaration broke the artifact, esbuild reported it, the output was sent to /dev/null, and
 # node then ran the PREVIOUS bundle and printed RENDER OK. The test passed; the game did not.

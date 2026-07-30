@@ -1,6 +1,5 @@
 const M = require("../new.cjs");
-let pass = 0, fail = 0;
-const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };
+const { ok, done } = require("./assert.js")();
 const clone = (g) => JSON.parse(JSON.stringify(g));
 
 console.log("\n— state shape —");
@@ -103,5 +102,4 @@ console.log("\n— what winter takes —");
   ok(M.foodRots(g, p) === 0, "a court that is short loses nothing to winter — it loses mouths");
 }
 
-console.log(`\n${pass} passed, ${fail} failed\n`);
-process.exit(fail ? 1 : 0);
+done();

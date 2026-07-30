@@ -198,76 +198,58 @@ argmax, contests ascend) inline.
 
 ## CHECKS: the rules as executable specification
 
-The successor to the retired differential, and the destination of the rule suites. The
-differential's robot chose from `availableCommands`, which mutates as rules change, so
-identical digests measured menu stability, not rule stability — it demonstrably missed a
-change that turned 0 of 196 won raids into 185 plundering ones. The fix is not a better
-robot; it is testing the RULES, semantically.
+`harness/engine/test-checks.js` is the successor to the retired differential and the
+destination of the rule suites. Two pure pieces, split so traces can come from anywhere:
+GENERATE (world, seed, length) → a trace of valid commands, played in place; CHECK
+(world, trace) → a report, replayed in place — the trace ADDRESSES every state it visits,
+so a failure names (world, seed, step, binding) and any state rebuilds by replaying to it.
+Nothing in the pipeline clones a state.
 
-**A CHECK is a Hoare triple over the doors: `{precondition} intent {postcondition}`.** Its
-three parts are the three layers already built — nothing reaches past them:
+CHECKS ARE OBSERVERS of the play, never drivers. A check is a rule as a Hoare triple,
+written FROM THE RULEBOOK, each citing its section: `instantiate` binds the precondition's
+variables against the current state; `order` names the intent; `capture` takes the
+before-facts the postcondition needs as PLAIN VALUES (the rule's declared read-set);
+`post` is relational over (captured, now). At every action boundary all checks instantiate
+into trackers; each trace command is matched against them with `Order.allows` plus a
+relevance filter (allows was built for driving and vacuously accepts contest terminals
+against empty orders); divergence drops a tracker, and one that survives to the boundary IS
+the rule happening. A completed action with NO surviving tracker lands in the coverage
+histogram — the mechanically generated list of rule specs still to write. INVARIANTS are
+the same idea unconditioned: pair-shaped ones take scalar captures on scoped commands,
+state-shaped ones just ask.
 
-- `pre` — queries with expected values, or a predicate over the ask-function. WRITTEN FROM
-  THE RULEBOOK, never from `availableCommands`: a precondition transcribed off the menu tests
-  the menu against itself and passes forever. Every check cites its rulebook section;
-  `great-kings-player-rules.md` claims to be exactly as implemented, and the checks are the
-  executable form of that claim.
-- `intent` — a list of ORDERS, each tagged with the desk expected to speak it (raids and
-  subversions pass the desk around; `Order.commands` already stops at desk boundaries).
-  Desugared to commands by `Order.commands`, executed through `dispatch`.
-- `post` — a predicate over the (before, after) pair of ask-functions. RELATIONAL, not
-  literal: "stores rose by the sum of the swept yields", "every non-winner dropped by the
-  winner's standing". A literal appears only where the literal IS the rule, and then it comes
-  from `BT`, not restated.
+Standing so far: three checks (the levy; the store-paid embassy; the friend→ally treaty,
+whose precondition restates envoy reach independently of the engine's `reach` — the point),
+three invariants (contest conservation, the reckoning touches only food, contests ascend),
+and the report with per-check observation counts (zero observations is a red build) and the
+uncovered-actions histogram. The generator's policy is data: `knobs.reject`, a rejection
+chance keyed by command type (forfeit at 1; the exit commands damped, because pure-uniform
+play dithers out of most errands before they complete). The invocation is parameterised and
+defaulted — `--seeds --length --worlds`, with `--rounds` an optional era bound, unlimited by
+default: length is THE bound, and deep years are where organically reached rule states live.
+Observation needed two matcher truths driving never did, both now in the checker: a
+relevance table (Order.allows vacuously accepts contest terminals against empty orders), and
+pruning trackers against the `mode` label (a bare region command matches ANY same-target
+order); trackers also reopen at the engine's set-down moves (`verb`, `back`), or the play's
+dithering starves them.
 
-A check is a TEMPLATE, not a script: it has parameters ("for a power p and region r where
-standing(p,r) = friend and influence ≥ the Ally floor and no incumbent stands higher…"), and
-the precondition is what a driver uses to find bindings.
+**What remains, in rough order:**
 
-**Every check runs in three modes, and the third is the point:**
-
-1. pre true → drive the intent → assert post;
-2. pre true but the intent UNDRIVABLE (Order licenses nothing) → red: the menu is stricter
-   than the written rule, or the written rule is incomplete — either is a finding;
-3. pre FALSE → assert the intent is undrivable — the catcher for rules that are not
-   enforced, which is the class of bug this project's history says matters most.
-
-Together 1–3 make each check a biconditional test of `availableCommands` against the
-rulebook, in both directions. Negative rules (once per year, the wild never submit) are
-checks whose expected outcome is UNDRIVABLE by design.
-
-**Invariants are the same shape with the condition removed:** predicates over
-(before, command, after), applied to every transition, each with a DECLARED SCOPE (every
-transition / action boundaries / the reckoning — `strained` taught that invariants have
-scopes). One runner core observes transitions and evaluates two tables: the invariants
-(unconditional) and the checks (gated). Seed the invariants table from the three already
-proven elsewhere: a refusal moves nothing, a contest mints or burns no goods, contests
-ascend by investment.
-
-**Two drivers over one definition:**
-
-- the WALKER: random play; at each state, find checks whose preconditions hold under some
-  binding, apply one (or deliberately attempt one whose pre is false, for mode 3), verify.
-  Parameterised — seeds, rounds, which checks, choose-policy — so guidance can come later:
-  bias `choose` toward states that make COLD preconditions true.
-- the SCRIPT: an authored scenario with known bindings, checks applied in a fixed order —
-  what the rule suites are today, re-expressed as data.
-
-**Non-vacuity lives in the runner, not in review.** The report is part of the design: per
-check — precondition seen true / fired / undrivable / violated — and the run FAILS on a check
-never exercised. A check that never fires is a decoration; the coast assertion and the
-once-per-year menu both taught this. This subsumes the coverage ratchet the tests section
-planned: the coverage unit is RULES EXERCISED, not command names emitted.
-
-**Migration order.** Runner + invariants table + five seed checks (the levy, the embassy's
-worth, the treaty climb, one raid, and once-per-year as a negative) → the walker with its
-three-mode report → dissolve the rule suites block by block as their claims are subsumed
-(economy, ownership, war, raid, strike, subvert, verbs). What stays outside, because they are
-not rules: the totality fuzz (test-commands — it needs ILLEGAL inputs the walker never
-generates), the door contracts (test-orders, test-view, test-query — whose walk-based parts
-fold into this runner), the boundary gate, and the render smoke. End state: one rules suite,
-four contract suites, two mechanical gates.
-
-The honest cost is the specification work: ~25–30 checks to cover the rulebook, each forcing
-"what does this rule actually require?" — and some of those questions will expose ambiguities
-in the rulebook itself. That is a feature, and it is where the time goes.
+- specs for the uncovered verbs the histogram names: trade, build, remove, the subversion;
+  tap-paid embassies and tap-paid sourcing generally (enumerate sponsorships); the
+  ally→subject treaty and the wild's refusal of it; the steward's levy (the one tax the
+  current precondition misses) and the chancery's embassy
+- the treaty check observes thinly (once across the default runs) — thicken it: a better
+  world, more seeds, or the guided generation below
+- expose `knobs.reject` on the CLI when a caller wants it
+- the raid family — multi-action sequences whose intents span desks (assembly, launch,
+  muster, sack); the tracker needs a sequence form
+- negative checks (the rule must REFUSE) as an explicit probe mode, if wanted: a refusal
+  never appears in a trace, so observation covers over-permission only when the generator
+  stumbles into it
+- guided generation toward cold checks — further `knobs`, steering walks to states where
+  unfired preconditions come true
+- fold the older rule suites (economy, ownership, war, raid, strike, subvert, verbs) into
+  checks block by block, per the tests section above
+- traces as inputs: saved failing traces as regression files; recorded games validated by
+  recognition

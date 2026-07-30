@@ -10,7 +10,7 @@ breaking them; each suite's deeper rationale lives in its own header.
    it) and `levant/scenario.js` → `harness/scenario.cjs` (the canon world as data, which the
    suites author their fixtures from). Generated, gitignored, rebuilt every run.
 
-2. **The suites** (`engine/test-*.js`, thirteen). Plain node scripts: green assertions,
+2. **The suites** (`engine/test-*.js`, fourteen). Plain node scripts: green assertions,
    non-zero exit on failure. What each one claims:
 
    | suite | its claim |
@@ -27,6 +27,7 @@ breaking them; each suite's deeper rationale lives in its own header.
    | `test-strike` | war from assembly to the last strike, on boards random play never reaches |
    | `test-subvert` | the subversion: poorest speaks first; the winner's standing is the blow's weight |
    | `test-verbs` | the thin verbs — treaty's climb and overtake, the sea raid — pinned by hand because random play barely lands them (treaty: once in 8 games) |
+   | `test-checks` | THE RULES AS EXECUTABLE SPECIFICATION: a generator plays; observer trackers match the play against rulebook-cited Hoare triples via `Order.allows`; a coverage histogram names the rules not yet specified. The destination of the rule suites — see TODO.md. Run standalone for the full report; scale by flags, all defaulted: `node test-checks.js --seeds 1,2,3 --length 2000 --worlds canon` (`--rounds N` adds an era bound; unlimited by default) |
 
    Two things ride along with every suite. `GK_CHECK=1` (set by `run-all.sh`) arms the
    engine's own invariants — `checkWorld` (true of every state), `checkMenu` (true of every

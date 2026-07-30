@@ -9,6 +9,8 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };
 const fork = F.fork;
 const D = (g, c) => M.dispatch(fork(g), c);
+const Q = (g, q) => M.query(g, q);
+const rung = (g, p, r) => Q(g, { ask: "standing", power: p, region: r });
 const openPalace = (g, p) => {
   const act = M.availableCommands(g).find((c) => c.t === "activate" && c.rid === F.home(p) && c.b === "palace");
   return D(g, act);
@@ -24,7 +26,7 @@ g = D(g, { t: "verb", v: "treaty" });
 let offered = M.availableCommands(g).filter((c) => c.t === "region").map((c) => c.rid);
 ok(offered.includes("UGA"), `a Friend at 6 with the Ally floor of 5 met may climb (${offered.join(",") || "none"})`);
 let g1 = D(g, { t: "region", rid: "UGA" });
-ok(g1.rel.H.UGA.s === "ally", `Friend → Ally (${g1.rel.H.UGA.s})`);
+ok(rung(g1, "H", "UGA") === "ally", `Friend → Ally (${rung(g1, "H", "UGA")})`);
 
 // an incumbent Ally with MORE influence blocks the climb
 let g2 = hatti(F.standing("H", "UGA", "friend", 6), F.standing("M", "UGA", "ally", 8));
@@ -38,15 +40,15 @@ let g3 = hatti(F.standing("H", "UGA", "friend", 9), F.standing("M", "UGA", "ally
 g3 = openPalace(g3, "H");
 g3 = D(g3, { t: "verb", v: "treaty" });
 g3 = D(g3, { t: "region", rid: "UGA" });
-ok(g3.rel.H.UGA.s === "ally" && g3.rel.M.UGA.s === "friend",
-   `overtaking demotes the incumbent (H ${g3.rel.H.UGA.s}, M ${g3.rel.M.UGA.s})`);
+ok(rung(g3, "H", "UGA") === "ally" && rung(g3, "M", "UGA") === "friend",
+   `overtaking demotes the incumbent (H ${rung(g3, "H", "UGA")}, M ${rung(g3, "M", "UGA")})`);
 
 // Ally → Subject, and the wild refuse it
 let g4 = hatti(F.standing("H", "UGA", "ally", 11));
 g4 = openPalace(g4, "H");
 g4 = D(g4, { t: "verb", v: "treaty" });
 g4 = D(g4, { t: "region", rid: "UGA" });
-ok(g4.rel.H.UGA.s === "subject", `Ally → Subject at the floor of 10 (${g4.rel.H.UGA.s})`);
+ok(rung(g4, "H", "UGA") === "subject", `Ally → Subject at the floor of 10 (${rung(g4, "H", "UGA")})`);
 
 let g5 = hatti(F.standing("H", "KAS", "ally", 11));   // Kaska are wild
 g5 = openPalace(g5, "H");

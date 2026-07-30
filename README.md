@@ -61,12 +61,13 @@ kinds → the order does not say enough**, and it says so.
 finds. That is the regression test for the command layer: add a command no order can express
 and it fails.
 
-**3. `view(g)` — one question, one answer.** Two consumers ask different questions and neither
-gets the other's answer reshaped:
+**3. `view(g)` — one question, one answer.** Three consumers ask different questions and none
+gets another's answer reshaped:
 
 ```
 a model asks   "what may I do?"    → availableCommands(g)
 the table asks "what do I show?"   → view(g)
+a test asks    "what is true?"     → query(g, q)
 ```
 
 The table does **no reasoning**. It does not check whether a payment suffices, count what is

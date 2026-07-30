@@ -7,6 +7,7 @@ const F = require("./fixtures.cjs");
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };
 const fork = F.fork;
+const Q = (g, q) => M.query(g, q);
 
 console.log("\n— state shape —");
 let g = M.initState(F.CANON);
@@ -14,10 +15,10 @@ ok(!("pendingOverflow" in g), "no pendingOverflow in state");
 ok(F.players().every((p) => !("committed" in g.players[p])), "no committed pool on any player");
 
 console.log("\n— the Food Store —");
-ok(M.foodStore(g, "M") === 1, `palace alone carries 1 food (got ${M.foodStore(g, "M")})`);
+ok(Q(g, { ask: "foodStore", power: "M" }) === 1, `palace alone carries 1 food (got ${Q(g, { ask: "foodStore", power: "M" })})`);
 // author a granary onto Mitanni's home ground and check it adds 2
 let g2 = M.initState(F.variant(F.addWork(F.home("M"), { type: "granary" })));
-ok(M.foodStore(g2, "M") === 3, `palace + one granary carries 3 (got ${M.foodStore(g2, "M")})`);
+ok(Q(g2, { ask: "foodStore", power: "M" }) === 3, `palace + one granary carries 3 (got ${Q(g2, { ask: "foodStore", power: "M" })})`);
 
 console.log("\n— the reckoning: grain rots, metal keeps —");
 // Mitanni opens rich; the whole table passes BY COMMAND, and the year is resolved
@@ -30,10 +31,10 @@ while (g3.shortfall && guard++ < 40) {
   if (!c) break;
   g3 = M.dispatch(g3, c);
 }
-const due = 1; // palace only at game start
-ok(g3.players.M.stock.food === M.foodStore(g3, "M"),
-   `food falls to the Food Store after upkeep (${g3.players.M.stock.food} vs store ${M.foodStore(g3, "M")})`);
-ok(g3.players.M.stock.bronze === 7 && g3.players.M.stock.cloth === 5 && g3.players.M.stock.pottery === 4,
+const m3 = Q(g3, { ask: "stock", power: "M" });
+ok(m3.food === Q(g3, { ask: "foodStore", power: "M" }),
+   `food falls to the Food Store after upkeep (${m3.food} vs store ${Q(g3, { ask: "foodStore", power: "M" })})`);
+ok(m3.bronze === 7 && m3.cloth === 5 && m3.pottery === 4,
    "bronze, cloth and pottery survive the year untouched");
 
 console.log("\n— no overflow commands survive anywhere —");
@@ -72,7 +73,10 @@ console.log("\n— a sourcing must actually pay —");
     checked++; if (offered !== pays) wrong++;
   }
   ok(checked > 2 && wrong === 0, `commitTaps is offered exactly when the taps pay (${checked} selections)`);
-  const potter = slots.find((s) => { const y = M.yieldOf(g, s.rid, s.i); return y && y.good !== "food"; });
+  const potter = slots.find((s) => {
+    const y = Q(g, { ask: "works", region: s.rid }).find((w) => w.slot === s.i)?.yield;
+    return y && y.good !== "food";
+  });
   if (potter) {
     const one = M.dispatch(fork(g), potter);
     ok(!M.availableCommands(one).some((c) => c.t === "commitTaps"),
@@ -90,7 +94,7 @@ console.log("\n— what winter takes —");
   // each boundary is its own AUTHORED opening: Hatti seated with exactly that much food
   const withFood = (n) => M.initState(F.variant(F.stock(p, { food: n })));
   const base = M.initState(F.CANON);
-  const keep = M.foodStore(base, p), due = M.upkeepDue(base, p).food;
+  const keep = Q(base, { ask: "foodStore", power: p }), due = Q(base, { ask: "upkeepDue", power: p }).food;
   ok(M.foodRots(withFood(0), p) === 0, "nothing rots when there is nothing");
   ok(M.foodRots(withFood(due + keep), p) === 0, `upkeep plus the store keeps (${due}+${keep}) — nothing rots`);
   ok(M.foodRots(withFood(due + keep + 3), p) === 3, "three above that, and three rot");

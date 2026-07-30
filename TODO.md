@@ -224,13 +224,24 @@ three invariants (contest conservation, the reckoning touches only food, contest
 and the report with per-check observation counts (zero observations is a red build) and the
 uncovered-actions histogram. The generator's policy is data: `knobs.reject`, a rejection
 chance keyed by command type (forfeit at 1; the exit commands damped, because pure-uniform
-play dithers out of most errands before they complete).
+play dithers out of most errands before they complete). The invocation is parameterised and
+defaulted — `--seeds --length --worlds`, with `--rounds` an optional era bound, unlimited by
+default: length is THE bound, and deep years are where organically reached rule states live.
+Observation needed two matcher truths driving never did, both now in the checker: a
+relevance table (Order.allows vacuously accepts contest terminals against empty orders), and
+pruning trackers against the `mode` label (a bare region command matches ANY same-target
+order); trackers also reopen at the engine's set-down moves (`verb`, `back`), or the play's
+dithering starves them.
 
 **What remains, in rough order:**
 
 - specs for the uncovered verbs the histogram names: trade, build, remove, the subversion;
   tap-paid embassies and tap-paid sourcing generally (enumerate sponsorships); the
-  ally→subject treaty and the wild's refusal of it
+  ally→subject treaty and the wild's refusal of it; the steward's levy (the one tax the
+  current precondition misses) and the chancery's embassy
+- the treaty check observes thinly (once across the default runs) — thicken it: a better
+  world, more seeds, or the guided generation below
+- expose `knobs.reject` on the CLI when a caller wants it
 - the raid family — multi-action sequences whose intents span desks (assembly, launch,
   muster, sack); the tracker needs a sequence form
 - negative checks (the rule must REFUSE) as an explicit probe mode, if wanted: a refusal

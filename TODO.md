@@ -23,20 +23,10 @@ opening influence, renaming a command — turns it red without anything having b
 a constraint rather than checking behaviour.** What earns a test's place is exercising a path, or
 checking an oracle whose value is not derivable from the code under test.
 
-**Delete — nothing replaces them.**
-
-| site | what |
-|---|---|
-| `test-economy.js` "state shape" | asserts `pendingOverflow` and `committed` are absent; nothing writes either |
-| `test-economy.js` "no overflow commands survive" | a 6,000-step walk that confirms four deleted command names never appear; `COMMANDS` closure covers this for every name, not four |
-| `test-hash.js` `ok(true, "→ the fingerprint is route-independent…")` | a comment counted as a passing assertion; make it a `console.log` |
-
 **Delete — an assertion already covers them.**
 
 | site | assertion |
 |---|---|
-| `test-ownership.js` "who owns what", "what a build produces" | `checkWorld` — a work answers a power or its own province |
-| `test-economy.js` "a sourcing must actually pay" | `checkMenu` — `commitTaps` ⟺ the taps pay |
 | `test-commands.js` "a court may always set down what it has picked up" | `checkMenu` — an open activation offers a way out |
 | `test-subvert.js` "once per target per year" | `checkMenu` — the menu never re-offers a spent target |
 | `test-raid.js` "goods leave the stores", "everything laid stays" | `dispatch` — a contest mints or burns no goods |
@@ -48,31 +38,24 @@ checking an oracle whose value is not derivable from the code under test.
 | `test-economy.js` "the Food Store" | `foodStore === 1`, `=== 3` | loop `Object.keys(BT)`: placing `t` moves the store by `BT[t].capBonus \|\| 0` |
 | `test-ownership.js` "follows the writ" | `atFriend === 1 && atSubject === 3` | `atSubject - atFriend === BT.granary.capBonus` |
 | `test-economy.js` "what winter takes" | four asserts evaluating `max(0, food - due - keep)` by hand | keep the two boundaries — exactly `due + keep`, and below `due` where the clamp lives |
-| `test-ownership.js` "a province's works answer whoever holds it" | a six-row `usable` truth table transcribing a three-line function | one property: raising a rung never revokes a command |
 
-**Fix — and expect to learn something.** Two checks whose outcome is unknown because neither has
-ever been written honestly:
-
-- `test-ownership.js` "markets open to Ties+" asserts `acts.length >= 0`. Write `> 0`. If it
-  fails, either the rule is not what the message claims or the fixture supplies no sources.
-- Two disjunctions admit the failure they exist to catch: `test-verbs.js` "the treaty costs a
-  command" passes when the activation vanished, and `test-raid.js` "the contest resolves" admits
-  three outcomes including nothing having happened. Tighten both.
+**Fix — and expect to learn something.** Two disjunctions admit the failure they exist to
+catch: `test-verbs.js` "the treaty costs a command" passes when the activation vanished, and
+`test-raid.js` "the contest resolves" admits three outcomes including nothing having
+happened. Tighten both.
 
 **Keep untouched.** `test-view.js`, both `test-commands.js` fuzzes, `test-orders.js`,
-`test-hash.js`'s route-independence and record-wipe, the render check, and the resolution oracles
+`test-hash.js`'s route-pair, the render check, and the resolution oracles
 in `test-subvert.js` and `test-verbs.js` — "everyone else drops by the winner's standing" and
 "overtaking demotes the incumbent" are rules with content, not restatements.
 
 **Still wanted as assertions, and not yet written:** the reckoning leaves every good but food
 untouched; a basket stays with its lot through resolution, not only across `bid`/`bidTake`.
 
-**Order.** Delete the dead and the subsumed first — both are safe, and the subsumed ones only
-after their assertion has been seen to fire. Then the rewrites. Then one parameterised
-`walk({ seeds, rounds, choose, onState })` to replace the per-file xorshift and `clone`
-copies, and a coverage ratchet over `COMMANDS` and `ACTIONS` keys — a coverage-directed
-`choose` is what reaches `treaty` and `searaid` without a hand-built board, and `endRaid` and
-`stand` are reached by no walk at all — only by `test-strike.js`'s hand-built boards.
+**Order.** Delete the subsumed first, after their assertion has been seen to fire; then the
+rewrites. The endgame for everything in this section is the CHECKS suite below: its runner is
+the `walk()` consolidation, its per-check report is the coverage ratchet, and the rule suites
+dissolve into checks block by block.
 
 **One constraint this work established: a walk finding no counterexample is not a proof.** An
 invariant asserting `strained` against its floor survived 25,000 states of one walk, and another
@@ -86,14 +69,13 @@ prefer breaking the source to confirm an assertion fires over trusting that it w
 world is identical but `contest.lots[pid].atk` has become `{}` where it was absent. It shows on
 roughly half the reversible bids a walk reaches.
 
-This is not a play defect: nothing reads the difference. It weakens the ORACLE. `fingerprint` is
-what `test-orders.js` compares to judge "same world, different route" for every action it
-round-trips, and what `diff.sh` compares across seeds — so a route that legitimately reverses
-itself reads as having changed the world.
+This is not a play defect: nothing reads the difference. It weakens the ORACLE. `fingerprint`
+is what `test-orders.js` compares to judge "same world, different route" for every action it
+round-trips, and what `test-hash.js`'s route-pair demands equality on — so a route that
+legitimately reverses itself reads as having changed the world.
 
-The fix is a line in `canonical`: skip a key whose canonical form is `{}` or `[]`. **It shifts
-the fingerprint**, so it belongs in its own commit with a fresh `ref.cjs`, and the differential
-reporting 0/10 is the expected outcome rather than a regression.
+The fix is a line in `canonical`: skip a key whose canonical form is `{}` or `[]`. It shifts
+every fingerprint, so it belongs in its own commit.
 
 ## Vestigial fields
 
@@ -112,8 +94,44 @@ unit that takes the field without counting are all rules that would need designi
 field means anything. So the decision is per field: design the rule, or delete it.
 
 **Deleting is a behaviour change, not a cleanup.** They are part of the serialised state, so
-removing `g.rot` shifts `fingerprint(g)` and the differential will report 0/10. That is correct
-and expected — but it means the removal belongs in its own commit, with a fresh `ref.cjs`.
+removing `g.rot` shifts `fingerprint(g)`; the removal belongs in its own commit.
+
+## `forfeit` cannot be told apart from its own confirmation
+
+`forfeit` is the only two-word command: the first arms it, the second carries it out, and any
+`pass` disarms it. But `availableCommands` offers the identical `{t:"forfeit"}` in both states,
+so nothing driving the game through `dispatch` can tell the arming word from the fatal one
+without reading `g.confirmForfeit` — which the interface is not allowed to do, and which `view`
+does not report.
+
+For the hot seat this is harmless: the table's own click sequence supplies the two words. It
+becomes a real defect the moment anything else drives the game. The fix is one of:
+
+- have `availableCommands` distinguish them (`{t:"forfeit", confirm:true}`), which makes the
+  distinction visible to `cmdKey`, the chain, and every caller; or
+- report the armed state as a fact on `view`, and leave the command alone.
+
+The first is the better shape — the menu should say what a command will do — but it changes the
+command surface, so it wants pinning in `test-commands.js` first.
+
+## The table never says which power is acting, and control interleaves
+
+The interface gives no clear statement of whose word the next command is. It matters most in the
+cases where the desk is NOT the power whose turn it is — control passes mid-action to a raid's
+defenders one at a time, to each participant in a subversion's bidding, and to whoever must
+choose abandonments in a famine. A player looking at a muster prompt has to infer from the
+panel's own label which court is being asked.
+
+The facts are already reported; this is a table-side change. `view` returns both `seat` (whose
+turn it is) and `effectiveSeat` (whose desk the next command comes from). `app.jsx:33` takes
+`const p = v.seat` and never reads `effectiveSeat` at all — so anything the table tints or
+labels from `p` speaks for the turn-holder even while another court is acting. Worth checking
+what currently keys off `p`: the notice colour, the `subject.self` highlight on the power cards,
+and the title block.
+
+To decide: whether the two seats want distinct treatments (a persistent "X to act" line, versus
+a temporary "Y is answering" state), and whether an interleaved actor should be visible on the
+board as well as in the panel.
 
 ## `forfeit` cannot be told apart from its own confirmation
 
@@ -177,3 +195,79 @@ Scheduling (every command, every turn, on a sample) and invariants-as-data
 (`{name, when, given, holds}`) remain harness work, waiting on the `walk()` consolidation in
 the tests section; `test-query.js` carries the two invariants written so far (foremost ≡
 argmax, contests ascend) inline.
+
+## CHECKS: the rules as executable specification
+
+The successor to the retired differential, and the destination of the rule suites. The
+differential's robot chose from `availableCommands`, which mutates as rules change, so
+identical digests measured menu stability, not rule stability — it demonstrably missed a
+change that turned 0 of 196 won raids into 185 plundering ones. The fix is not a better
+robot; it is testing the RULES, semantically.
+
+**A CHECK is a Hoare triple over the doors: `{precondition} intent {postcondition}`.** Its
+three parts are the three layers already built — nothing reaches past them:
+
+- `pre` — queries with expected values, or a predicate over the ask-function. WRITTEN FROM
+  THE RULEBOOK, never from `availableCommands`: a precondition transcribed off the menu tests
+  the menu against itself and passes forever. Every check cites its rulebook section;
+  `great-kings-player-rules.md` claims to be exactly as implemented, and the checks are the
+  executable form of that claim.
+- `intent` — a list of ORDERS, each tagged with the desk expected to speak it (raids and
+  subversions pass the desk around; `Order.commands` already stops at desk boundaries).
+  Desugared to commands by `Order.commands`, executed through `dispatch`.
+- `post` — a predicate over the (before, after) pair of ask-functions. RELATIONAL, not
+  literal: "stores rose by the sum of the swept yields", "every non-winner dropped by the
+  winner's standing". A literal appears only where the literal IS the rule, and then it comes
+  from `BT`, not restated.
+
+A check is a TEMPLATE, not a script: it has parameters ("for a power p and region r where
+standing(p,r) = friend and influence ≥ the Ally floor and no incumbent stands higher…"), and
+the precondition is what a driver uses to find bindings.
+
+**Every check runs in three modes, and the third is the point:**
+
+1. pre true → drive the intent → assert post;
+2. pre true but the intent UNDRIVABLE (Order licenses nothing) → red: the menu is stricter
+   than the written rule, or the written rule is incomplete — either is a finding;
+3. pre FALSE → assert the intent is undrivable — the catcher for rules that are not
+   enforced, which is the class of bug this project's history says matters most.
+
+Together 1–3 make each check a biconditional test of `availableCommands` against the
+rulebook, in both directions. Negative rules (once per year, the wild never submit) are
+checks whose expected outcome is UNDRIVABLE by design.
+
+**Invariants are the same shape with the condition removed:** predicates over
+(before, command, after), applied to every transition, each with a DECLARED SCOPE (every
+transition / action boundaries / the reckoning — `strained` taught that invariants have
+scopes). One runner core observes transitions and evaluates two tables: the invariants
+(unconditional) and the checks (gated). Seed the invariants table from the three already
+proven elsewhere: a refusal moves nothing, a contest mints or burns no goods, contests
+ascend by investment.
+
+**Two drivers over one definition:**
+
+- the WALKER: random play; at each state, find checks whose preconditions hold under some
+  binding, apply one (or deliberately attempt one whose pre is false, for mode 3), verify.
+  Parameterised — seeds, rounds, which checks, choose-policy — so guidance can come later:
+  bias `choose` toward states that make COLD preconditions true.
+- the SCRIPT: an authored scenario with known bindings, checks applied in a fixed order —
+  what the rule suites are today, re-expressed as data.
+
+**Non-vacuity lives in the runner, not in review.** The report is part of the design: per
+check — precondition seen true / fired / undrivable / violated — and the run FAILS on a check
+never exercised. A check that never fires is a decoration; the coast assertion and the
+once-per-year menu both taught this. This subsumes the coverage ratchet the tests section
+planned: the coverage unit is RULES EXERCISED, not command names emitted.
+
+**Migration order.** Runner + invariants table + five seed checks (the levy, the embassy's
+worth, the treaty climb, one raid, and once-per-year as a negative) → the walker with its
+three-mode report → dissolve the rule suites block by block as their claims are subsumed
+(economy, ownership, war, raid, strike, subvert, verbs). What stays outside, because they are
+not rules: the totality fuzz (test-commands — it needs ILLEGAL inputs the walker never
+generates), the door contracts (test-orders, test-view, test-query — whose walk-based parts
+fold into this runner), the boundary gate, and the render smoke. End state: one rules suite,
+four contract suites, two mechanical gates.
+
+The honest cost is the specification work: ~25–30 checks to cover the rulebook, each forcing
+"what does this rule actually require?" — and some of those questions will expose ambiguities
+in the rulebook itself. That is a feature, and it is where the time goes.

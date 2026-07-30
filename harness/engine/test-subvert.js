@@ -73,8 +73,8 @@ g3 = D(g3, { t: "stand" });
 g3 = D(g3, { t: "bid", pid: "KIZ", good: "bronze" });       // M: 1 bronze — neither dominates
 g3 = D(g3, { t: "stand" });
 g3 = D(g3, { t: "stand" });                                 // H: nothing
-ok(g3.log.some((l) => /no clear master/.test(l)), "two incomparable baskets are a tie");
-ok(inf(g3, "H") === 8 && inf(g3, "M") === 5 && inf(g3, "E") === 3, "and nothing moves");
+ok(inf(g3, "H") === 8 && inf(g3, "M") === 5 && inf(g3, "E") === 3,
+   "two incomparable baskets are a tie — nothing moves");
 
 console.log("\n— but the goods are gone regardless —");
 ok(Q(g3, { ask: "stock", power: "E", good: "cloth" }) === 4
@@ -92,8 +92,8 @@ ok(inf(g4, "M") === 5 && inf(g4, "E") === 0 && inf(g4, "H") === 3,
    `Mitanni's 5 undermines the rest (E ${inf(g4, "E")}, H ${inf(g4, "H")})`);
 
 console.log("\n— once per target per year —");
-// the ledger itself has no query yet; this is a tolerated read the query door will retire
-ok((g1.spent.H.subvert || []).includes("KIZ"), "the year's ledger records the attempt");
+ok((Q(g1, { ask: "ledger", power: "H" }).subvert || []).includes("KIZ"),
+   "the year's ledger records the attempt");
 // the table goes round by commands until Hatti's desk comes back, then Hatti tries again
 let g5 = fork(g1);
 for (const q of ["M", "B", "E", "Y"]) g5 = D(g5, { t: "pass" });

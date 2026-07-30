@@ -10,7 +10,6 @@ const F = require("./fixtures.cjs");
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };
 const fork = F.fork;
-const said = (g, re) => g.log.find((l) => re.test(l));
 const Q = (g, q) => M.query(g, q);
 const inf = (g, p, r) => Q(g, { ask: "influence", power: p, region: r });
 const qad = (g) => Q(g, { ask: "works", region: "QAD" });          // what stands in Qadesh
@@ -43,13 +42,13 @@ function assemble(g) {                        // activate the stables and open t
 }
 function commitAll(g) {
   for (const c of M.availableCommands(g).filter((c) => c.t === "slot"))
-    if (!g.raid.atk.some((u) => u.rid === c.rid && u.i === c.i)) g = M.dispatch(fork(g), c);
+    if (!Q(g, { ask: "raid" }).attackers.some((u) => u.region === c.rid && u.slot === c.i)) g = M.dispatch(fork(g), c);
   return g;
 }
 const openRaid = (g) => commitAll(assemble(g));
 const launch = (g) => {                       // launch, then let every protector stand in turn
   g = M.dispatch(fork(g), { t: "launch" });
-  while (g.mode && g.mode.v === "raidDef") g = M.dispatch(fork(g), { t: "stand" });
+  while (Q(g, { ask: "engagement" })?.phase === "muster") g = M.dispatch(fork(g), { t: "stand" });
   return g;
 };
 const strike = (g, want) => {                 // strike the first slot whose WORKS ROW matches
@@ -64,10 +63,11 @@ console.log("\n— a province's militia is its garrisons, not its works —");
 {
   // Qadesh holds one garrison and one farm and answers to nobody: its militia is ONE unit.
   let g = launch(openRaid(scenario({ strength: 2 })));
-  ok(/militia stands alone: 1 garrison/.test(said(g, /militia stands alone/) || ""),
-     `the militia is the garrison alone — "${said(g, /militia stands alone/)}"`);
+  const militia = Q(g, { ask: "raid" }).mustered;
+  ok(militia.length === 1 && militia[0].terms === "militia",
+     "the militia is the garrison alone — one unit, on militia terms");
   ok(qad(g).find((w) => w.slot === 1).tapped === false, "the farm is not conscripted, so it is not tapped");
-  ok(sacking(g), `2 against 1 carries the field (${said(g, /REPELLED|sweeps/)})`);
+  ok(sacking(g), "2 against 1 carries the field");
 }
 
 console.log("\n— an allied region answers a call with one band, for 1 influence —");
@@ -78,11 +78,11 @@ console.log("\n— an allied region answers a call with one band, for 1 influenc
   ok(M.availableCommands(open).filter((c) => c.t === "slot" && c.rid === "AMU").length === 1,
      "the assembly offers Amurru one band and no more, though two garrisons stand there");
   const g = commitAll(open);
-  const called = g.raid.atk.find((u) => u.rid === "AMU");
-  ok(called && called.terms === "allied" && called.paidInf === 1,
-     `the call is priced in influence (terms ${called && called.terms}, paid ${called && called.paidInf})`);
+  const called = Q(g, { ask: "raid" }).attackers.find((u) => u.region === "AMU");
+  ok(called && called.terms === "allied" && called.paidInfluence === 1,
+     `the call is priced in influence (terms ${called && called.terms}, paid ${called && called.paidInfluence})`);
   ok(inf(g, "B", "AMU") === before - 1, `and the influence leaves Amurru (${before} → ${inf(g, "B", "AMU")})`);
-  ok(Q(g, { ask: "works", region: "AMU" }).find((w) => w.slot === called.i).tapped,
+  ok(Q(g, { ask: "works", region: "AMU" }).find((w) => w.slot === called.slot).tapped,
      "a called unit is tapped, its year spent");
 }
 
@@ -94,10 +94,10 @@ console.log("\n— a protector musters its own reachable units, and never more �
   const g = M.dispatch(fork(openRaid(g0)), { t: "launch" });      // the muster runs on the launch
   const mustered = Q(g, { ask: "raid" }).mustered;
   ok(mustered.length === 2, `the muster meets the deficit exactly (${mustered.length} against 2)`);
-  ok(g.raid.defC.every((c) => c.terms === "own"), "and what stands is the protector's own");
+  ok(mustered.every((c) => c.terms === "own"), "and what stands is the protector's own");
   ok(qad(g).filter((w) => !w.tapped).length === 1, "the third garrison keeps its year");
-  ok(/REPELLED: 2 against 2/.test(said(M.dispatch(fork(g), { t: "stand" }), /REPELLED/) || ""),
-     "matching the attack repels it");
+  ok(Q(M.dispatch(fork(g), { t: "stand" }), { ask: "engagement" }) === null,
+     "matching the attack repels it — the engagement closes with no sack");
 }
 
 console.log("\n— an untapped fortress adds its walls, and view says so —");
@@ -108,8 +108,8 @@ console.log("\n— an untapped fortress adds its walls, and view says so —");
   const g = openRaid(g0);
   const col = M.view(g).panels.find((p) => p.id === "field").columns[1];
   const after = launch(fork(g));
-  ok(/\+1/.test(said(after, /walls of/) || ""), `the ledger counts the walls — "${said(after, /walls of/)}"`);
-  ok(col.total === "defence 1", `and view reports the same defence the ledger will count (view said "${col.total}")`);
+  ok(Q(after, { ask: "engagement" }) === null, "the walls alone repel the single raider");
+  ok(col.total === "defence 1", `and view reports the same defence the ledger counts (view said "${col.total}")`);
 }
 
 // ---- 2. the two strike outcomes ---------------------------------------------------------------
@@ -133,7 +133,7 @@ console.log("\n— an already-tapped work is destroyed, and the foremost answers
   // Mitanni at 6 and Egypt at 3 protect Qadesh; both its works stand tapped, so both strikes
   // must destroy. The launch tests the foremost for 1, each demolition for 2.
   let g = launch(openRaid(scenario({ strength: 2, tapped: [0, 1], protectors: { M: 6, E: 3 } })));
-  ok(Q(g, { ask: "raid" })?.strikes === 2, `2 against 0 wins two strikes (${said(g, /sweeps/)})`);
+  ok(Q(g, { ask: "raid" })?.strikes === 2, "2 against 0 wins two strikes");
   ok(inf(g, "M", "QAD") === 5, `the launch costs the foremost 1 (Mitanni ${inf(g, "M", "QAD")})`);
   g = strike(g, () => true);
   ok(!qad(g).some((w) => w.type === "garrison"), "the exhausted garrison is torn down");

@@ -40,13 +40,13 @@ for (let seed = 1; seed <= 40; seed++) {
   let g = M.initState(F.CANON);
   prevStep = null; prevMapOnly = null;   // each seed is a fresh game: the counter starts over
   for (let step = 0; step < 4000; step++) {
-    if (g.round > 20) break;
+    if (M.query(g, { ask: "year" }) > 20) break;
     let menu;
     try { menu = M.availableCommands(g); } catch (e) { flag("availableCommands threw: " + e.message, {}); break; }
     if (!menu || !menu.length) break;
 
     let v;
-    try { v = M.view(g); } catch (e) { flag("view threw: " + e.message, { chain: g.chain }); break; }
+    try { v = M.view(g); } catch (e) { flag("view threw: " + e.message, { chain: M.query(g, { ask: "chain" }) }); break; }
     states++;
     const onMenu = new Set(menu.map(key));
 
@@ -56,7 +56,7 @@ for (let seed = 1; seed <= 40; seed++) {
       if (o.state === "blocked" && o.cmd) flag(`a blocked option is still dispatchable (${where})`, { o: o.label });
       if (o.state === "blocked" && !o.why) flag(`a blocked option gives no reason (${where})`, { o: o.label });
       // THE POINT OF ALL OF IT: nothing clickable that the engine did not offer.
-      if (o.cmd && !onMenu.has(key(o.cmd))) flag(`an option offers a command that is NOT on the menu (${where})`, { o: o.label, cmd: o.cmd, chain: g.chain });
+      if (o.cmd && !onMenu.has(key(o.cmd))) flag(`an option offers a command that is NOT on the menu (${where})`, { o: o.label, cmd: o.cmd, chain: M.query(g, { ask: "chain" }) });
     };
 
     for (const pan of v.panels) {
@@ -111,7 +111,7 @@ for (let seed = 1; seed <= 40; seed++) {
         }
       }
       for (const c of menu)
-        if (!drawn.has(key(c))) flag(`a ${c.t} command is on the menu but no panel carries it`, { cmd: c, chain: g.chain });
+        if (!drawn.has(key(c))) flag(`a ${c.t} command is on the menu but no panel carries it`, { cmd: c, chain: M.query(g, { ask: "chain" }) });
     }
 
     // ---- the state-wide facts the table is allowed to know ----
@@ -128,8 +128,8 @@ for (let seed = 1; seed <= 40; seed++) {
       prevStep = v.step; prevMapOnly = v.mapOnly;
     }
     if (typeof v.mapOnly !== "boolean") flag("view does not say whether the board is the workplace", { mapOnly: v.mapOnly });
-    if (v.chain !== g.chain) flag("view reports a chain other than the state's", { view: v.chain, state: g.chain });
-    if (!v.panels.some((pan) => pan.kind === "chronicle")) flag("no chronicle panel", { chain: g.chain });
+    if (v.chain !== M.query(g, { ask: "chain" })) flag("view reports a chain other than the state's", { view: v.chain, state: M.query(g, { ask: "chain" }) });
+    if (!v.panels.some((pan) => pan.kind === "chronicle")) flag("no chronicle panel", { chain: M.query(g, { ask: "chain" }) });
 
     // ---- the map covers the menu: every place-command reachable on the board ----
     const mapPan = v.panels.find((pan) => pan.kind === "map");
@@ -141,7 +141,7 @@ for (let seed = 1; seed <= 40; seed++) {
       }
       for (const c of menu) {
         if (c.t !== "region" && c.t !== "activate" && c.t !== "slot") continue;
-        if (!clickable.has(key(c))) flag(`a ${c.t} command is on the menu but nowhere on the map`, { cmd: c, chain: g.chain });
+        if (!clickable.has(key(c))) flag(`a ${c.t} command is on the menu but nowhere on the map`, { cmd: c, chain: M.query(g, { ask: "chain" }) });
       }
       // every region drawn, always, so nothing appears and vanishes under the hand
       if (Object.keys(mapPan.regions).length !== F.CANON.regions.length)
@@ -168,10 +168,11 @@ console.log("\nâ€” the board says nothing can be done when nothing can be done â
 {
   let g = M.initState(F.CANON);
   let guard = 0;
-  while (!PLAYERS.every((q) => g.out[q] || g.passed[q]) && guard++ < 100) {
-    const menu = M.availableCommands(g);
-    const pass_ = menu.find((c) => c.t === "pass");
-    g = M.dispatch(g, pass_ || menu[0]);
+  // the menu itself says when the year is spent: only the reckoning remains on offer
+  while (guard++ < 100) {
+    const m = M.availableCommands(g);
+    if (m.length === 1 && m[0].t === "resolveUpkeep") break;
+    g = M.dispatch(g, m.find((c) => c.t === "pass") || m[0]);
   }
   const menu = M.availableCommands(g);
   ok(menu.length === 1 && menu[0].t === "resolveUpkeep", "the menu offers only the reckoning", JSON.stringify(menu));

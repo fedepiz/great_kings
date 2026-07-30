@@ -100,8 +100,10 @@ console.log("\n— a raid and a subversion, as the door reports them —");
   const e = Q(r, { ask: "engagement" });
   ok(J(e) === J({ kind: "raid", phase: "assembly", region: "QAD" }), `the assembly is an engagement (${J(e)})`);
   const rr = Q(r, { ask: "raid" });
-  ok(rr.target === "QAD" && rr.attackers.length >= 1 && rr.strikes === null,
-     `the raid reports its field (${rr.attackers.length} attacker(s), no strikes yet)`);
+  ok(rr.target === "QAD" && rr.by === "land" && rr.attackers.length >= 1 && rr.strikes === null,
+     `the raid reports its field (${rr.attackers.length} attacker(s), by land, no strikes yet)`);
+  ok(rr.attackers.every((u) => ["own", "allied", "militia", "hire"].includes(u.terms)),
+     "every commitment carries its terms");
   r = D(r, { t: "launch" });
   ok(Q(r, { ask: "engagement" }).phase === "muster" && Q(r, { ask: "desk" }) === "M",
      "the launch opens the muster at the protector's desk");
@@ -112,7 +114,8 @@ sub = D(sub, { t: "region", rid: "KIZ" });
 const e2 = Q(sub, { ask: "engagement" });
 ok(J(e2) === J({ kind: "subversion", phase: "bidding", region: "KIZ" }), `a bidding is an engagement (${J(e2)})`);
 const c2 = Q(sub, { ask: "contest" });
-ok(J(c2.turnOrder) === J(["E", "M", "H"]) && c2.region === "KIZ", "the contest reports its order and its lot");
+ok(J(c2.turnOrder) === J(["E", "M", "H"]) && c2.region === "KIZ" && c2.binding === true,
+   "the contest reports its order, its lot, and that a subversion binds from the first word");
 ok(J(Q(sub, { ask: "desk" })) === J("E"), "and the desk stands with the poorest bidder");
 
 // ascending-by-influence, held where influence is static — the non-vacuous instance
@@ -133,7 +136,7 @@ console.log("\n— foremost ≡ argmax(influence), every region, every sampled s
   for (const seed of [11, 22, 33]) {
     s = seed >>> 0;
     let w = M.initState(F.CANON);
-    for (let i = 0; i < 1200 && w.round <= 10; i++) {
+    for (let i = 0; i < 1200 && Q(w, { ask: "year" }) <= 10; i++) {
       if (i % 7 === 0) {
         const seatedNow = Q(w, { ask: "seated" });
         for (const rid of REGIONS) {

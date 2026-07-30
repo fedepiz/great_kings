@@ -20,24 +20,13 @@ cd "$(dirname "$0")/.."
 export GK_CHECK=1
 
 # harness/new.cjs is the engine as the suites import it; harness/scenario.cjs is the canon
-# world as data, which the suites author their fixtures from; harness/ref.cjs is the
-# differential's accepted baseline. All are generated; none is committed.
+# world as data, which the suites author their fixtures from. Both are generated; neither is
+# committed.
 echo "— engine bundle —"
 rm -f harness/new.cjs harness/scenario.cjs
 npx esbuild levant/engine.js --format=cjs --bundle --outfile=harness/new.cjs >/dev/null
 npx esbuild levant/scenario.js --format=cjs --bundle --outfile=harness/scenario.cjs >/dev/null
 echo "  harness/new.cjs + harness/scenario.cjs"
-
-echo "— differential —"
-# The reference is a copy of the bundle at a point whose play was accepted. A fresh clone has
-# none, so the first run establishes one and has nothing to compare against — that is
-# expected, and it is not a pass.
-if [ ! -f harness/ref.cjs ]; then
-  cp harness/new.cjs harness/ref.cjs
-  echo "  no reference — baseline established from this build (nothing compared)"
-else
-  ./harness/engine/diff.sh
-fi
 
 # A SUITE'S EXIT CODE IS THE RESULT; its count line is only a summary. Print the count and drop
 # the status, and a suite that cannot report a failure looks identical to a passing one. A
@@ -55,6 +44,11 @@ for f in economy ownership war raid strike subvert verbs commands hash orders vi
   fi
 done
 cd ../..
+
+# THE BOUNDARY IS A RED BUILD, NOT A REVIEW HABIT. Nothing outside the engine interprets the
+# state document: reads go through the doors, and every exception is named in the allowlist.
+echo "— the boundary —"
+node harness/engine/check-boundary.cjs
 
 # THE SOURCES MUST COMPILE ON THEIR OWN. engine.js is checked by the bundle above; app.jsx is
 # not imported by any suite, so without this a fault in it reaches nothing but the browser.

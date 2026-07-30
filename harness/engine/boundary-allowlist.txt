@@ -1,0 +1,7 @@
+# =====================================================================
+# boundary-allowlist.txt — every reach past the engine's doors, NAMED
+# =====================================================================
+# check-boundary.cjs holds the table and the harness to reading the state only through the
+# doors: the menu, the view, the query. This list is EMPTY, and stays empty unless a reach is
+# deliberately granted here as "file field — reason". The check is exact both ways: an
+# unlisted read is a red build, and so is a stale grant.

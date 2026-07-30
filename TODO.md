@@ -154,19 +154,6 @@ To decide: whether the two seats want distinct treatments (a persistent "X to ac
 a temporary "Y is answering" state), and whether an interleaved actor should be visible on the
 board as well as in the panel.
 
-## Two answers to "who patronises this people?"
-
-`battleUnits` and `biddablePeoples` each decide whether a wild people already has an Ally+ patron,
-and they decide it differently: `live(g).find((q) => rank(g, q, rid) >= 2)` takes the FIRST living
-power that qualifies, while `biddablePeoples` loops `for (const q of PLAYERS)` and keeps the LAST,
-over all five rather than the living. Ally is exclusive and forfeit zeroes a court's ties, so the
-two should never disagree today, which is exactly what makes this worth closing before something
-lets them: the question is asked twice and answered by two different walks.
-
-One of them should be the answer — `patronOf(g, rid)` beside `biddablePeoples` — and the other
-should call it. Nothing about play changes, so the differential should stay 10/10; if it does not,
-the two were already disagreeing and the seed that shows it is the interesting artefact.
-
 ## The suites read facts through eleven exported internals, not a door
 
 The export list ends with a block marked "READ BY THE SUITES ONLY" — `costTapCovered`,

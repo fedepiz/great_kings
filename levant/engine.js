@@ -1546,6 +1546,101 @@ function view(g) {
   };
 }
 
+// ============================== THE QUERY ==============================
+// THE THIRD DOOR. `availableCommands` answers "what may I do?", `view` answers "what do I
+// show?", and `query(g, q)` answers "WHAT IS TRUE?" — for the suites, and for anything else
+// that must assess a position without reading the state's internal shape. `q` is plain data —
+// `{ ask: "influence", power: "H", region: "KIZ" }` in, a plain value out — so queries can be
+// stored, compared, and generated.
+//
+// THE CONTRACT, each clause earned by a scar:
+//
+// - ONE ENTRY PER ASK in QUERIES — the ACTIONS pattern. `args` declares the spec; `answer`
+//   computes it by DELEGATING to the engine's one computation of that fact. No query
+//   re-derives a rule: a second derivation is a second answer, and a second answer is how
+//   every bug this project has had got in.
+// - TOTAL OVER WELL-FORMED QUERIES; THROWS ON MALFORMED ONES. The opposite of `dispatch`'s
+//   politeness, on purpose: dispatch faces players and stale worlds, query faces authors, and
+//   a typo'd ask answering `undefined` is an assertion that cannot fail — a suite once
+//   asserted on `R[rid].coast`, which never existed, and passed for its whole life.
+// - ANSWERS ARE FRESH VALUES, never references into `g`. A live row handed out would make the
+//   read door a write door.
+// - THE VOCABULARY IS THE AUTHOR'S (see scenario.js), never the engine's. The `bd.o` overload
+//   is decoded here, as `view` decodes it, and never leaves; a capital reads "home", never a
+//   holder's rung.
+const RAID_PHASE = { raidCommit: "assembly", raidDef: "muster", raidStrike: "sack" };
+const QUERIES = {
+  // ---- the clock ----
+  year:   { args: {}, answer: (g) => g.round },
+  turn:   { args: {}, answer: (g) => g.turn },
+  desk:   { args: {}, answer: (g) => effectiveSeat(g) },
+  seated: { args: {}, answer: (g) => live(g) },
+  passed: { args: { power: "power" }, answer: (g, q) => !!g.passed[q.power] },
+  // ---- the ladder ----
+  influence: { args: { power: "power", region: "region" }, answer: (g, q) => infOf(g, q.power, q.region) },
+  standing:  { args: { power: "power", region: "region" },
+               answer: (g, q) => (q.region === g.world.HOME[q.power] ? "home" : (g.rel[q.power][q.region]?.s ?? "none")) },
+  strained:  { args: { power: "power", region: "region" }, answer: (g, q) => !!g.rel[q.power][q.region]?.strained },
+  foremost:  { args: { region: "region", except: "power?" }, answer: (g, q) => foremostIn(g, q.region, q.except) },
+  patron:    { args: { region: "region" }, answer: (g, q) => patronOf(g, q.region) },
+  // ---- the ground ----
+  works: { args: { region: "region" },
+           answer: (g, q) => {
+             const { PLAYERS } = g.world; const out = [];
+             (g.b[q.region] || []).forEach((bd, i) => {
+               if (!bd) return;
+               const owner = PLAYERS.includes(bd.o) ? bd.o : null;
+               out.push({ slot: i, type: bd.t, owner, tapped: !!bd.tap,
+                          yield: yieldOf(g, q.region, i), answers: owner ?? "province" });
+             });
+             return out;
+           } },
+  coastal:    { args: { region: "region" }, answer: (g, q) => isCoastal(g, q.region) },
+  neighbours: { args: { region: "region" }, answer: (g, q) => [...(g.world.ADJ[q.region] || [])] },
+  // ---- the stores ----
+  stock:     { args: { power: "power", good: "good?" },
+               answer: (g, q) => (q.good !== undefined ? g.players[q.power].stock[q.good] : { ...g.players[q.power].stock }) },
+  foodStore: { args: { power: "power" }, answer: (g, q) => foodStore(g, q.power) },
+  upkeepDue: { args: { power: "power" }, answer: (g, q) => upkeepDue(g, q.power) },
+  // ---- the engagement ----
+  engagement: { args: {},
+                answer: (g) => {
+                  if (g.raid) return { kind: "raid", phase: RAID_PHASE[g.mode?.v] ?? null, region: g.raid.t };
+                  if (g.contest) return { kind: "subversion", phase: g.mode?.v === "subvertBid" ? "bidding" : null, region: g.contest.rid };
+                  return null;
+                } },
+  raid: { args: {},
+          answer: (g) => (!g.raid ? null : {
+            target: g.raid.t,
+            attackers: g.raid.atk.map((u) => ({ region: u.rid, slot: u.i })),
+            mustered: g.raid.defC.map((u) => ({ region: u.rid, slot: u.i })),
+            strikes: g.raid.strikes ?? null,
+          }) },
+  contest: { args: {},
+             answer: (g) => (!g.contest ? null : {
+               region: g.contest.rid,
+               turnOrder: [...g.contest.turnOrder],
+               parties: { ...g.contest.party },
+               lots: JSON.parse(JSON.stringify(g.contest.lots)),
+             }) },
+};
+function query(g, q) {
+  const bad = (m) => { throw new Error("query: " + m); };
+  if (!q || typeof q.ask !== "string") bad("no ask");
+  const spec = QUERIES[q.ask];
+  if (!spec) bad(`unknown ask "${q.ask}"`);
+  for (const k of Object.keys(q)) if (k !== "ask" && !(k in spec.args)) bad(`"${q.ask}" takes no "${k}"`);
+  for (const [k, kind] of Object.entries(spec.args)) {
+    const want = kind.endsWith("?") ? kind.slice(0, -1) : kind;
+    const v = q[k];
+    if (v === undefined) { if (kind.endsWith("?")) continue; bad(`"${q.ask}" needs "${k}"`); }
+    if (want === "power" && !g.world.PLAYERS.includes(v)) bad(`"${v}" is no power`);
+    if (want === "region" && !g.world.R[v]) bad(`"${v}" is no region`);
+    if (want === "good" && !GOODS.includes(v)) bad(`"${v}" is no good`);
+  }
+  return spec.answer(g, q);
+}
+
 // ============================== THE CHAIN ==============================
 // Every accepted command advances a hash of the COMMAND HISTORY:
 //     chain' = H(chain, key(cmd))
@@ -2598,9 +2693,7 @@ function battleUnits(g, p, t, side, mode) {
       // demolition. This is the only branch that does not reach `unitReaches`, so it is the only
       // one that has to ask.
       if (rid === t) { if (side === "def" && BT[bd.t].unit) out.push({ rid, i, terms: "militia", cost: 0 }); return; }
-      // TODO: two answers to "who patronises this people?" — `biddablePeoples` asks the same
-      // question over a different walk.
-      const patron = live(g).find((q) => rank(g, q, rid) >= 2);
+      const patron = patronOf(g, rid);
       if (R[rid].wild) {
         const byLand = unitReaches(g, p, rid, bd, t);
         const seafaring = !!R[rid].sea && mode === "sea" && isCoastal(g, t);
@@ -2677,20 +2770,21 @@ function toggleUnit(g, side, rid, i, good) {
   const pick = good || (u.terms === "hire" ? GOODS.filter((t) => g.players[who].stock[t] > 0).sort((a, b) => g.players[who].stock[b] - g.players[who].stock[a])[0] : null);
   commitUnit(g, side, u, pick);
 }
+// WHO PATRONISES THIS PEOPLE? A wild people's Ally-or-better patron among the seated powers,
+// or null. THE one answer: `battleUnits` and `biddablePeoples` both ask here. Ally is
+// exclusive — a treaty collapses every rival Ally+ to Friend — so "the" patron is
+// well-defined, and a fallen power cannot hold one, because forfeit zeroes its ties.
+function patronOf(g, rid) { return live(g).find((q) => rank(g, q, rid) >= 2) || null; }
 function biddablePeoples(g) {
   if (!g.raid) return [];
-  const { R, ADJ, PLAYERS } = g.world;
+  const { R, ADJ } = g.world;
   const t = g.raid.t, out = [];
   for (const rid of Object.keys(g.b)) {
     if (!R[rid].wild) continue;
     const adj = (ADJ[t] || []).includes(rid);
     const seaf = !!R[rid].sea && g.raid.mode === "sea" && isCoastal(g, t);
     if (!adj && !seaf) continue;
-    // TODO: two answers to "who patronises this people?" — `battleUnits` asks the same question
-    // over a different walk.
-    let patron = null;
-    for (const q of PLAYERS) if (rank(g, q, rid) >= 2) patron = q;
-    if (patron) continue; // a patron closes the bidding — their bands answer calls instead
+    if (patronOf(g, rid)) continue; // a patron closes the bidding — their bands answer calls instead
     if (!g.b[rid].some((bd) => bd && BT[bd.t].unit && !bd.tap)) continue;
     out.push({ pid: rid, seafarer: seaf && !adj });
   }
@@ -2917,8 +3011,9 @@ function perish(g, rid, i) {
 // adding one so the interface can decide whether something is allowed, stop: that answer
 // belongs in `availableCommands`.
 export {
-  // THE DOORS — the whole API for anything that plays the game.
-  initState, dispatch, availableCommands, view, validCmd,
+  // THE DOORS — the whole API for anything that plays the game, and for anything that must
+  // judge a position without playing it (`query`).
+  initState, dispatch, availableCommands, view, validCmd, query,
 
   // THE RULES' OWN TABLE — building types, read by the suites beside the world. NO WORLD is
   // exported: the engine ships none, and the world a caller plays on is the scenario it

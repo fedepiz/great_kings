@@ -46,6 +46,7 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };
 const ask = (g) => (q) => M.query(g, q);
 const GOODS = ["food", "bronze", "cloth", "pottery"];
+const VERB_MODES = new Set(["build", "remove", "tax", "entreat", "treaty", "subvert", "raid", "searaid", "trade"]);
 const sum = (a) => a.reduce((x, y) => x + y, 0);
 
 // ---- the precondition vocabulary, said once ----
@@ -233,23 +234,28 @@ const INVARIANTS = [
 // =====================================================================
 // THE GENERATOR — (world, seed, length) → a trace of valid commands. Nothing else.
 // =====================================================================
-// The one policy knob so far: pure-uniform play dithers — it abandons most errands before
-// they complete, so the rules barely happen. `exitBias` is the probability of taking an
-// exit-flavoured command when anything else is on offer. This is the first, crudest form of
-// the tunable generation the design calls for; guidance toward cold checks comes later.
-const EXITS = new Set(["back", "endActivation", "cancelActivation", "tradeCancel", "srcToChoose", "srcBack", "bidTake"]);
-function generate(scenario, seed, length, rounds, exitBias = 0.1) {
+// The generator's policy is DATA, not branches: `knobs.reject` is a rejection chance keyed
+// by command type. Draw a command uniformly; if its type has a chance and the roll rejects,
+// draw again (bounded, so a menu of nothing-but-rejects still terminates). Nothing is named
+// specially — even forfeit's exclusion is just a chance of 1. Guidance toward cold checks
+// will be further knobs here, not further branches.
+function generateRandom(scenario, seed, length, knobs = {}) {
+  const reject = knobs.reject || {};
+  const rounds = knobs.rounds ?? 8;
   let s = seed >>> 0;
   const rnd = () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
   let g = M.initState(scenario);
   const trace = [];
   for (let i = 0; i < length; i++) {
     if (M.query(g, { ask: "year" }) > rounds) break;
-    const menu = M.availableCommands(g).filter((c) => c.t !== "forfeit");
+    const menu = M.availableCommands(g);
     if (!menu.length) break;
-    const onward = menu.filter((c) => !EXITS.has(c.t));
-    const pool = onward.length && rnd() >= exitBias ? onward : menu;
-    const cmd = pool[Math.floor(rnd() * pool.length)];
+    let cmd = menu[Math.floor(rnd() * menu.length)];
+    for (let tries = 0; tries < 25; tries++) {
+      const chance = reject[cmd.t];
+      if (!chance || rnd() >= chance) break;
+      cmd = menu[Math.floor(rnd() * menu.length)];
+    }
     trace.push(cmd);
     g = M.dispatch(g, cmd);
   }
@@ -286,11 +292,15 @@ function checkTrace(scenario, trace, report, runLabel) {
       default: return false;
     }
   };
+  // Trackers open at action boundaries AND at the engine's own set-down moves: a `verb` or
+  // `back` command abandons the previous errand-candidate at an UNCHANGED position and begins
+  // a new one, so the tracker set is replaced wholesale there. `offset` records how far into
+  // the action a tracker opened, so completion is measured from its own start.
   const openTrackers = (step) => {
     trackers = [];
     for (const check of CHECKS)
       for (const b of check.instantiate(ask(g)))
-        trackers.push({ check, bind: b, order: check.order(b), used: [], cap: check.capture(ask(g), b), at: step });
+        trackers.push({ check, bind: b, order: check.order(b), used: [], cap: check.capture(ask(g), b), at: step, offset: action.length });
   };
   const closeAction = (endStep) => {
     if (action.length) {
@@ -299,7 +309,7 @@ function checkTrace(scenario, trace, report, runLabel) {
       // an errand exited without spending its command is DITHERING, not the verb it abandoned
       const label = ["endActivation", "cancelActivation", "tradeCancel"].includes(last)
         ? "(abandoned)" : verb || action[0].cmd.t;
-      const covered = trackers.filter((t) => t.matched === action.length);
+      const covered = trackers.filter((t) => t.matched === action.length - t.offset);
       const cov = report.coverage[label] || (report.coverage[label] = { actions: 0, covered: 0 });
       cov.actions++;
       if (covered.length) cov.covered++;
@@ -329,6 +339,10 @@ function checkTrace(scenario, trace, report, runLabel) {
     // has diverged from that instantiation and the tracker is dropped
     trackers = trackers.filter((t) => {
       if (t.bind.p !== desk0) return false;
+      // the mode label names the verb currently chosen; a tracker whose order disagrees is
+      // tracking an errand the play is not on — without this, a bare `region` command
+      // matches ANY same-target order, whatever its verb
+      if (VERB_MODES.has(mode) && t.order.verb !== mode) return false;
       if (!relevant(t.order, cmd)) return false;
       if (!M.Order.allows(t.order, cmd, t.used, mode)) return false;
       M.Order.mark(t.order, cmd, t.used, mode);
@@ -338,6 +352,7 @@ function checkTrace(scenario, trace, report, runLabel) {
     action.push({ cmd, mode });
     g = M.dispatch(g, cmd);
     const Qa = ask(g);
+
     for (const { inv, cap } of pairs) {
       const tally = report.invariants[inv.name];
       tally.fired++;
@@ -351,6 +366,9 @@ function checkTrace(scenario, trace, report, runLabel) {
       const msg = inv.holds(Qa);
       if (msg) tally.failures.push({ run: runLabel, at: step, reason: msg });
     }
+    // a verb picked (or an errand set down) is a fresh intent at an unmoved position:
+    // replace the tracker set so the play's dithering cannot starve the observers
+    if (cmd.t === "verb" || cmd.t === "back") openTrackers(step + 1);
     // the action boundary: a command was spent, the activation closed, or the desk moved
     const actNow = Qa({ ask: "activation" });
     const spent = (act0 && actNow && actNow.left !== null && act0.left !== null && actNow.left < act0.left)
@@ -378,9 +396,16 @@ const report = { runs: [], coverage: {}, checks: {}, invariants: {} };
 for (const c of CHECKS) report.checks[c.name] = { cite: c.cite, ok: 0, no: 0, failures: [] };
 for (const i of INVARIANTS) report.invariants[i.name] = { cite: i.cite, fired: 0, failures: [] };
 
+// the run policy: never forfeit; mostly see errands through rather than dither out of them
+const KNOBS = { rounds: 8, reject: {
+  forfeit: 1,
+  back: 0.9, endActivation: 0.9, cancelActivation: 0.9, tradeCancel: 0.9,
+  srcToChoose: 0.9, srcBack: 0.9, bidTake: 0.9,
+} };
+
 console.log("\n— generate, then check: the trace addresses every state it visits —");
 for (const [label, world] of Object.entries(WORLDS)) for (const seed of [5, 17, 23, 41]) {
-  const trace = generate(world(), seed, 700, 8);
+  const trace = generateRandom(world(), seed, 700, KNOBS);
   report.runs.push({ world: label, seed, steps: trace.length });
   checkTrace(world(), trace, report, `${label}/${seed}`);
   console.log(`   · ${label}/${seed}: ${trace.length} commands replayed`);

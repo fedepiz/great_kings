@@ -222,8 +222,9 @@ Standing so far: three checks (the levy; the store-paid embassy; the friend→al
 whose precondition restates envoy reach independently of the engine's `reach` — the point),
 three invariants (contest conservation, the reckoning touches only food, contests ascend),
 and the report with per-check observation counts (zero observations is a red build) and the
-uncovered-actions histogram. The generator has one policy knob, `exitBias`, damping the
-dithering that otherwise abandons most errands before they complete.
+uncovered-actions histogram. The generator's policy is data: `knobs.reject`, a rejection
+chance keyed by command type (forfeit at 1; the exit commands damped, because pure-uniform
+play dithers out of most errands before they complete).
 
 **What remains, in rough order:**
 
@@ -235,8 +236,8 @@ dithering that otherwise abandons most errands before they complete.
 - negative checks (the rule must REFUSE) as an explicit probe mode, if wanted: a refusal
   never appears in a trace, so observation covers over-permission only when the generator
   stumbles into it
-- guided generation toward cold checks — replace the exitBias crutch with a `choose` policy
-  that steers walks to states where unfired preconditions come true
+- guided generation toward cold checks — further `knobs`, steering walks to states where
+  unfired preconditions come true
 - fold the older rule suites (economy, ownership, war, raid, strike, subvert, verbs) into
   checks block by block, per the tests section above
 - traces as inputs: saved failing traces as regression files; recorded games validated by

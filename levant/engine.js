@@ -1000,10 +1000,11 @@ const Order = { read: orderRead, allows: orderAllows, mark: orderMark, commands:
 // =====================================================================
 //                             THE VIEW
 // =====================================================================
-// TWO CONSUMERS ASK TWO DIFFERENT QUESTIONS, and neither gets the other's answer reshaped:
+// THREE CONSUMERS ASK THREE DIFFERENT QUESTIONS, and none gets another's answer reshaped:
 //
 //   a model asks  "what may I do?"   → availableCommands(g)   commands, nothing else
 //   the table asks "what do I show?"  → view(g)                one structure, drawn as-is
+//   a test asks   "what is true?"    → query(g, q)            plain facts; see THE QUERY
 //
 // The table does no reasoning. It does not check whether a payment suffices, count what is
 // left, or know that commands have types. It reads panels, draws them, and ships back the
@@ -3033,8 +3034,7 @@ export {
 
   // READ BY THE SUITES ONLY. These let a test assert against a rule directly instead of
   // inferring it from play. Nothing in the interface may call them.
-  // TODO: the suites read facts through eleven exported internals, not a door — `query(g, q)`
-  // replaces this whole block; see TODO.md.
-  costTapCovered, foodRots, foodStore, foremostIn, infOf, legalTargets,
-  specOf, tapYields, upkeepDue, usable, yieldOf,
+  // TODO: six internals still leave by this block, not the query door — each dies with the
+  // test that reads it; see TODO.md.
+  costTapCovered, foodRots, legalTargets, specOf, tapYields, usable,
 };

@@ -82,8 +82,8 @@ const granaryAt = (rung, influence) => M.initState(F.variant(
   F.addWork(foreign, { type: "granary" }),
   F.standing("M", foreign, rung, influence),
 ));
-const atFriend = M.foodStore(granaryAt("friend", 2), "M");
-const atSubject = M.foodStore(granaryAt("subject", 10), "M");
+const atFriend = M.query(granaryAt("friend", 2), { ask: "foodStore", power: "M" });
+const atSubject = M.query(granaryAt("subject", 10), { ask: "foodStore", power: "M" });
 ok(atFriend === 1 && atSubject === 3, `a granary counts only inside your writ (Friend ${atFriend}, Subject ${atSubject})`);
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

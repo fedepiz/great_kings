@@ -49,7 +49,6 @@ checking an oracle whose value is not derivable from the code under test.
 | `test-ownership.js` "follows the writ" | `atFriend === 1 && atSubject === 3` | `atSubject - atFriend === BT.granary.capBonus` |
 | `test-economy.js` "what winter takes" | four asserts evaluating `max(0, food - due - keep)` by hand | keep the two boundaries — exactly `due + keep`, and below `due` where the clamp lives |
 | `test-ownership.js` "a province's works answer whoever holds it" | a six-row `usable` truth table transcribing a three-line function | one property: raising a rung never revokes a command |
-| `test-war.js` "the foremost, and ties" | three hand-built argmax tables | `foremostIn` against a brute-force oracle, every province × every state of a walk |
 
 **Fix — and expect to learn something.** Two checks whose outcome is unknown because neither has
 ever been written honestly:
@@ -65,9 +64,8 @@ ever been written honestly:
 in `test-subvert.js` and `test-verbs.js` — "everyone else drops by the winner's standing" and
 "overtaking demotes the incumbent" are rules with content, not restatements.
 
-**Still wanted as assertions, and not yet written:** a contest's `turnOrder` is ascending by
-influence; the reckoning leaves every good but food untouched; a basket stays with its lot
-through resolution, not only across `bid`/`bidTake`.
+**Still wanted as assertions, and not yet written:** the reckoning leaves every good but food
+untouched; a basket stays with its lot through resolution, not only across `bid`/`bidTake`.
 
 **Order.** Delete the dead and the subsumed first — both are safe, and the subsumed ones only
 after their assertion has been seen to fire. Then the rewrites. Then one parameterised
@@ -154,71 +152,28 @@ To decide: whether the two seats want distinct treatments (a persistent "X to ac
 a temporary "Y is answering" state), and whether an interleaved actor should be visible on the
 board as well as in the panel.
 
-## The suites read facts through eleven exported internals, not a door
+## Six internals still leave by the suites-only block, not the query door
 
-The export list ends with a block marked "READ BY THE SUITES ONLY" — `costTapCovered`,
-`foodRots`, `foodStore`, `foremostIn`, `infOf`, `legalTargets`, `specOf`, `tapYields`,
-`upkeepDue`, `usable`, `yieldOf` — and beyond it the suites read `g.rel`, `g.b`, `g.players`,
-`g.raid`, `g.contest`, `g.mode` directly. Every such read couples a test to the state's internal
-shape, and the coupling has already produced the vacuous-pass disease once: `test-verbs.js`
-asserts on `R[rid].coast`, a field that has never existed, and has passed for its whole life.
+`query(g, q)` is open — the third door beside `availableCommands` and `view`, one `QUERIES`
+entry per ask, validate-or-throw, answers as values; `test-query.js` is its proof. Five of the
+eleven suites-only exports died with their last readers. Each of the six that remain is bound
+to a test the tests section above already judges:
 
-The fix is a third door beside the two that exist. `availableCommands` answers *"what may I
-do?"*; `view` answers *"what do I show?"*; **`query(g, q)` answers *"what is true?"*** — with
-the same laundering discipline `view` already obeys (the `bd.o` overload never leaves the
-engine).
+| export | last reader | dies with |
+|---|---|---|
+| `costTapCovered`, `specOf`, `tapYields` | `test-economy` "a sourcing must actually pay" | its deletion — `checkMenu`'s `commitTaps` biconditional covers it |
+| `foodRots` | `test-economy` "what winter takes" | that section's rewrite, or a `foodRots` ask if the fact earns one |
+| `usable` | `test-ownership`'s `usable` truth table | the rewrite to "raising a rung never revokes a command" |
+| `legalTargets` | `test-view`'s closing contrast | nothing soon — that block is the documented proof of WHY the map must not read it |
 
-**The contract**, each clause earned by a scar:
+Direct reads of `g` still standing in the suites, each a vocabulary decision not yet made:
+the year's ledger (`g.spent`) in `test-subvert`, a commitment's terms and price
+(`g.raid.atk[].terms`/`paidInf`/`defC`) in `test-strike`, the activation budget
+(`g.act.capLeft`) in `test-verbs` and `test-commands`, and the chronicle greps
+(`said(g, /…/)`) that the tests section already sentences. Extend the vocabulary only when a
+reader earns it — an ask nobody asks is an export with no caller, one door over.
 
-- `q` is plain data — `{ask: "...", ...args}` in, a plain value out. Queries are serialisable,
-  storable, comparable, generable.
-- A `QUERIES` table with one dispatcher over it — the `ACTIONS` pattern. Each entry declares
-  its arg spec; the dispatcher validates against `PLAYERS`/`R`/`GOODS` once, generically.
-- **Total over well-formed queries; throws on malformed ones.** Deliberate contrast with
-  `dispatch`: dispatch faces players and stale worlds, so it refuses politely; query faces test
-  authors, and a typo'd query answering `undefined` is an assertion that cannot fail — the
-  `R[rid].coast` disease.
-- Answers are fresh values, never references into `g` — a returned live row would make the read
-  door a write door.
-- Every answer is computed in one place: an entry delegates to the engine's one computation of
-  the fact (`foremost` → `foremostIn`). No query re-derives a rule.
-
-**The vocabulary, v1** — derived from what the suites read today, nothing speculative:
-
-| domain | ask | args | answer |
-|---|---|---|---|
-| the clock | `year` · `turn` · `desk` · `seated` | — | year; whose turn; whose desk answers next; powers still seated |
-| | `passed` | power | bool |
-| the ladder | `influence` | power, region | 0..n |
-| | `standing` | power, region | `none·friend·ally·subject·home` |
-| | `strained` | power, region | bool |
-| | `foremost` | region | powers, ties included |
-| | `patron` | region | a wild people's Ally+ patron, or null |
-| the ground | `works` | region | `[{slot, type, owner, tapped, yield, answers}]` — owner a power or null; `answers` a power or `"province"` |
-| | `coastal` · `neighbours` | region | bool; region ids |
-| the stores | `stock` | power, good? | n, or the whole `{food, bronze, cloth, pottery}` |
-| | `foodStore` · `upkeepDue` | power | the store's ceiling; `{food: n}` |
-| the engagement | `engagement` | — | null, or `{kind: raid·subversion, phase, region}` |
-| | `raid` | — | null, or `{target, attackers, mustered, strikes}` |
-| | `contest` | — | null, or `{region, turnOrder, parties, lots}` |
-
-`patron` grows `patronOf(g, rid)`, which closes "Two answers to who patronises this people?"
-above. `works.answers` speaks `checkWorld`'s own phrase, so invariants written over queries
-read like the rulebook.
-
-**Deliberately absent:** legality — `availableCommands` IS that door, and a `may(power, verb)`
-query for a power not at the desk would take a second rules engine; the chronicle — the
-`said(g, /…/)` greps are a smell to retire, not enshrine; the digests — already doors.
-`legalTargets` is the one awkward customer: leave it exported until the test purge above
-decides its readers' fate.
-
-**Its own proof:** a `test-query.js` that imports only `initState`, `dispatch`, `query` —
-drive to a known position with commands, ask, compare — plus one cross-oracle: `foremost(r)` ≡
-argmax over `influence(p, r)`, two queries answered by different internal paths, so agreement
-means something. Scheduling (every command, every turn, at the end, on a sample) and
-invariants-as-data (`{name, when, given, holds}`, predicates plain JS until three of them show
-a shape worth a combinator) live in the harness, not the engine.
-
-Landing it is a pure addition — the differential stays 10/10. Done means the "READ BY THE
-SUITES ONLY" export block deletes, and the test rewrites above target queries instead of
-internals.
+Scheduling (every command, every turn, on a sample) and invariants-as-data
+(`{name, when, given, holds}`) remain harness work, waiting on the `walk()` consolidation in
+the tests section; `test-query.js` carries the two invariants written so far (foremost ≡
+argmax, contests ascend) inline.

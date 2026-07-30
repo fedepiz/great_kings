@@ -11,6 +11,10 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };
 const fork = F.fork;
 const said = (g, re) => g.log.find((l) => re.test(l));
+const Q = (g, q) => M.query(g, q);
+const inf = (g, p, r) => Q(g, { ask: "influence", power: p, region: r });
+const qad = (g) => Q(g, { ask: "works", region: "QAD" });          // what stands in Qadesh
+const sacking = (g) => Q(g, { ask: "engagement" })?.phase === "sack";
 
 // ---- the board: Babylon raids Qadesh, which is adjacent to Babylon's own home. -------------
 // Babylon's stables (reach 3) opens the raid; Amurru is Babylon's Subject and adjacent to
@@ -48,8 +52,10 @@ const launch = (g) => {                       // launch, then let every protecto
   while (g.mode && g.mode.v === "raidDef") g = M.dispatch(fork(g), { t: "stand" });
   return g;
 };
-const strike = (g, want) => {                 // strike the first slot matching `want`
-  const c = M.availableCommands(g).filter((x) => x.t === "slot").find((x) => want(g.b[x.rid][x.i], x.i));
+const strike = (g, want) => {                 // strike the first slot whose WORKS ROW matches
+  const rows = qad(g);
+  const c = M.availableCommands(g).filter((x) => x.t === "slot")
+    .find((x) => { const w = rows.find((r) => r.slot === x.i); return w && want(w); });
   return c ? M.dispatch(fork(g), c) : g;
 };
 
@@ -60,23 +66,24 @@ console.log("\n— a province's militia is its garrisons, not its works —");
   let g = launch(openRaid(scenario({ strength: 2 })));
   ok(/militia stands alone: 1 garrison/.test(said(g, /militia stands alone/) || ""),
      `the militia is the garrison alone — "${said(g, /militia stands alone/)}"`);
-  ok(!g.b.QAD[1].tap, "the farm is not conscripted, so it is not tapped");
-  ok(g.mode && g.mode.v === "raidStrike", `2 against 1 carries the field (${said(g, /REPELLED|sweeps/)})`);
+  ok(qad(g).find((w) => w.slot === 1).tapped === false, "the farm is not conscripted, so it is not tapped");
+  ok(sacking(g), `2 against 1 carries the field (${said(g, /REPELLED|sweeps/)})`);
 }
 
 console.log("\n— an allied region answers a call with one band, for 1 influence —");
 {
   // Amurru is Babylon's ALLY, not its Subject, and two garrisons stand there.
   const open = assemble(scenario({ bands: 2, amu: { rung: "ally", influence: 5 } }));
-  const before = M.infOf(open, "B", "AMU");
+  const before = inf(open, "B", "AMU");
   ok(M.availableCommands(open).filter((c) => c.t === "slot" && c.rid === "AMU").length === 1,
      "the assembly offers Amurru one band and no more, though two garrisons stand there");
   const g = commitAll(open);
   const called = g.raid.atk.find((u) => u.rid === "AMU");
   ok(called && called.terms === "allied" && called.paidInf === 1,
      `the call is priced in influence (terms ${called && called.terms}, paid ${called && called.paidInf})`);
-  ok(M.infOf(g, "B", "AMU") === before - 1, `and the influence leaves Amurru (${before} → ${M.infOf(g, "B", "AMU")})`);
-  ok(g.b.AMU[called.i].tap, "a called unit is tapped, its year spent");
+  ok(inf(g, "B", "AMU") === before - 1, `and the influence leaves Amurru (${before} → ${inf(g, "B", "AMU")})`);
+  ok(Q(g, { ask: "works", region: "AMU" }).find((w) => w.slot === called.i).tapped,
+     "a called unit is tapped, its year spent");
 }
 
 console.log("\n— a protector musters its own reachable units, and never more —");
@@ -85,9 +92,10 @@ console.log("\n— a protector musters its own reachable units, and never more �
   const g0 = scenario({ strength: 2, qadesh: ["garrison", "garrison", "garrison"] },
     F.standing("M", "QAD", "subject", 10));
   const g = M.dispatch(fork(openRaid(g0)), { t: "launch" });      // the muster runs on the launch
-  ok(g.raid.defC.length === 2, `the muster meets the deficit exactly (${g.raid.defC.length} against 2)`);
+  const mustered = Q(g, { ask: "raid" }).mustered;
+  ok(mustered.length === 2, `the muster meets the deficit exactly (${mustered.length} against 2)`);
   ok(g.raid.defC.every((c) => c.terms === "own"), "and what stands is the protector's own");
-  ok(g.b.QAD.filter((bd) => bd && !bd.tap).length === 1, "the third garrison keeps its year");
+  ok(qad(g).filter((w) => !w.tapped).length === 1, "the third garrison keeps its year");
   ok(/REPELLED: 2 against 2/.test(said(M.dispatch(fork(g), { t: "stand" }), /REPELLED/) || ""),
      "matching the attack repels it");
 }
@@ -110,12 +118,14 @@ console.log("\n— an untapped producer is overrun, and surrenders its full yiel
   // No protector, so the militia stands. Three raiders carry the field either way — what is at
   // stake is only whether the farm is still standing untapped when the strikes are chosen.
   let g = launch(openRaid(scenario({ strength: 3 })));
-  const before = g.players.B.stock.food;
-  g = strike(g, (bd) => bd.t === "farm");
+  const foodOf = (gg) => Q(gg, { ask: "stock", power: "B", good: "food" });
+  const before = foodOf(g);
+  g = strike(g, (w) => w.type === "farm");
   const qadFarm = F.region(F.CANON, "QAD").farm;
-  ok(g.players.B.stock.food - before === qadFarm,
-     `the farm's whole yield reaches the raider's stores (${g.players.B.stock.food - before} of ${qadFarm} food)`);
-  ok(g.b.QAD[1] && g.b.QAD[1].tap, "the overrun farm is tapped, and still stands");
+  ok(foodOf(g) - before === qadFarm,
+     `the farm's whole yield reaches the raider's stores (${foodOf(g) - before} of ${qadFarm} food)`);
+  const farmRow = qad(g).find((w) => w.type === "farm");
+  ok(farmRow && farmRow.tapped, "the overrun farm is tapped, and still stands");
 }
 
 console.log("\n— an already-tapped work is destroyed, and the foremost answers for it —");
@@ -123,15 +133,15 @@ console.log("\n— an already-tapped work is destroyed, and the foremost answers
   // Mitanni at 6 and Egypt at 3 protect Qadesh; both its works stand tapped, so both strikes
   // must destroy. The launch tests the foremost for 1, each demolition for 2.
   let g = launch(openRaid(scenario({ strength: 2, tapped: [0, 1], protectors: { M: 6, E: 3 } })));
-  ok(g.raid && g.raid.strikes === 2, `2 against 0 wins two strikes (${said(g, /sweeps/)})`);
-  ok(M.infOf(g, "M", "QAD") === 5, `the launch costs the foremost 1 (Mitanni ${M.infOf(g, "M", "QAD")})`);
+  ok(Q(g, { ask: "raid" })?.strikes === 2, `2 against 0 wins two strikes (${said(g, /sweeps/)})`);
+  ok(inf(g, "M", "QAD") === 5, `the launch costs the foremost 1 (Mitanni ${inf(g, "M", "QAD")})`);
   g = strike(g, () => true);
-  ok(!g.b.QAD.some((bd) => bd && bd.t === "garrison"), "the exhausted garrison is torn down");
-  ok(M.infOf(g, "M", "QAD") === 3 && M.infOf(g, "E", "QAD") === 3,
-     `and shames the foremost 2 more (Mitanni ${M.infOf(g, "M", "QAD")}, Egypt ${M.infOf(g, "E", "QAD")})`);
+  ok(!qad(g).some((w) => w.type === "garrison"), "the exhausted garrison is torn down");
+  ok(inf(g, "M", "QAD") === 3 && inf(g, "E", "QAD") === 3,
+     `and shames the foremost 2 more (Mitanni ${inf(g, "M", "QAD")}, Egypt ${inf(g, "E", "QAD")})`);
   g = strike(g, () => true);
-  ok(M.infOf(g, "M", "QAD") === 1 && M.infOf(g, "E", "QAD") === 1,
-     `the foremost is reckoned afresh, so the second blow falls on the tie (Mitanni ${M.infOf(g, "M", "QAD")}, Egypt ${M.infOf(g, "E", "QAD")})`);
+  ok(inf(g, "M", "QAD") === 1 && inf(g, "E", "QAD") === 1,
+     `the foremost is reckoned afresh, so the second blow falls on the tie (Mitanni ${inf(g, "M", "QAD")}, Egypt ${inf(g, "E", "QAD")})`);
 }
 
 // ---- 3. the branch that no state reaches -------------------------------------------------------
@@ -144,14 +154,15 @@ console.log("\n— every composition of an undefended target, every strength —
     for (let strength = 1; strength <= 4; strength++) {
       raids++;
       let g = launch(openRaid(scenario({ strength, qadesh: [a, b, c] })));
-      if (!(g.mode && g.mode.v === "raidStrike")) continue;
+      if (!sacking(g)) continue;
       won++;
-      const before = g.players.B.stock.food;
-      while (g.mode && g.mode.v === "raidStrike") {          // take the plunder first if there is any
-        const next = strike(g, (bd, i) => !!M.yieldOf(g, "QAD", i));
-        g = next.mode && next.mode.v === "raidStrike" && next.raid.strikes === g.raid.strikes ? strike(g, () => true) : next;
+      const before = Q(g, { ask: "stock", power: "B", good: "food" });
+      while (sacking(g)) {                                   // take the plunder first if there is any
+        const next = strike(g, (w) => !!w.yield);
+        g = sacking(next) && Q(next, { ask: "raid" }).strikes === Q(g, { ask: "raid" }).strikes
+          ? strike(g, () => true) : next;
       }
-      if (g.players.B.stock.food > before) plundering++;
+      if (Q(g, { ask: "stock", power: "B", good: "food" }) > before) plundering++;
     }
   }
   ok(plundering > 0, `of ${raids} raids on an unprotected Qadesh, ${won} were won and ${plundering} plundered anything`);

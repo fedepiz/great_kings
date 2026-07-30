@@ -27,7 +27,7 @@ harness/
   run-all.sh       everything, in one command (`npm test`)
   render-check.jsx does the table draw, at both sizes?
   engine/
-    test-*.js      ten suites, 112 assertions
+    test-*.js      twelve suites; the exact assertion count is in the test output
     drive.js       plays a seeded game, prints a fingerprint
     diff.sh        replays 10 seeds against ref.cjs — a pure refactor must be identical
     check.sh       bundle + differential, quickly
@@ -191,8 +191,9 @@ hand-poked state is a world no rule produced and no validator saw. Clone the can
 in the author's vocabulary (`harness/engine/fixtures.cjs`: `variant`, `seatFirst`, `standing`,
 `addWork`, `setWorks`, `stocks`), seat it through `initState`, and drive the rest by commands.
 Deliberately corrupting a state to prove an assertion can fire is the one exception — that is
-a proof, not a fixture. Reads of `g` in assertions are tolerated until the query door exists;
-see TODO.md. To explore several futures from one position, fork the timeline with `F.fork(g)`
+a proof, not a fixture. Facts are read back through the third door, `query(g, q)`; a suite
+reads `g` directly only where the vocabulary has no ask yet (TODO.md lists the stragglers).
+To explore several futures from one position, fork the timeline with `F.fork(g)`
 — the position is copied, the world is shared, because `g.world` is immutable — never with a
 blind deep clone that pays to duplicate what nothing may write.
 

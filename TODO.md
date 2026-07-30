@@ -31,13 +31,6 @@ checking an oracle whose value is not derivable from the code under test.
 | `test-economy.js` "nothing is turned away" | sets a stock to 20, adds 5, asserts 25 — no engine code runs, and `before` is never read |
 | `test-economy.js` "no overflow commands survive" | a 6,000-step walk that confirms four deleted command names never appear; `COMMANDS` closure covers this for every name, not four |
 | `test-hash.js` `ok(true, "→ the fingerprint is route-independent…")` | a comment counted as a passing assertion; make it a `console.log` |
-| `test-war.js` "damage walks down the ladder" | the loop applies its own `-2`; no strike code executes, so the engine could stop subtracting and this stays green |
-
-Deleting the last one leaves raid strike damage uncovered — random play fires roughly one strike
-per eight seeds. Its replacement is already written: the destroy-branch block of
-`harness/engine/repro-strike.js` drives a raid through `dispatch` to two strikes and asserts the
-damage falls on `foremostIn` and is recomputed between blows. Delete the `test-war.js` entry when
-that file joins the suite list — see the section on a province's works defending it.
 
 **Delete — an assertion already covers them.**
 
@@ -84,7 +77,7 @@ after their assertion has been seen to fire. Then the rewrites. Then one paramet
 `walk({ seeds, rounds, choose, onState })` to replace the per-file xorshift and `clone`
 copies, and a coverage ratchet over `COMMANDS` and `ACTIONS` keys — a coverage-directed
 `choose` is what reaches `treaty` and `searaid` without a hand-built board, and `endRaid` and
-`stand` are currently reached by no walk at all.
+`stand` are reached by no walk at all — only by `test-strike.js`'s hand-built boards.
 
 **One constraint this work established: a walk finding no counterexample is not a proof.** An
 invariant asserting `strained` against its floor survived 25,000 states of one walk, and another
@@ -117,7 +110,7 @@ builds on it:
 |---|---|---|
 | `bd.capGoods` | `yieldOf` | never written, so the branch is unconditionally `1` |
 | `g.rot` | `nextPlayer`, `finishUpkeep` | maintained and reset, never read |
-| `c.deny` | `commitUnit`, `resolveRaid` | written as `!!u.deny`, and `battleUnits` never sets `u.deny` — so always false, and the filter removes nothing |
+| `c.deny` | `commitUnit`, `defenceStrength` | written as `!!u.deny`, and `battleUnits` never sets `u.deny` — so always false, and the filter removes nothing |
 
 Each is a half-stated rule, not a hook: a per-building yield, a within-year round counter, and a
 unit that takes the field without counting are all rules that would need designing before the
@@ -164,57 +157,15 @@ To decide: whether the two seats want distinct treatments (a persistent "X to ac
 a temporary "Y is answering" state), and whether an interleaved actor should be visible on the
 board as well as in the panel.
 
-## A province's works defend it, so a raid can never plunder one
+## Two answers to "who patronises this people?"
 
-Checked end to end against §9, driven through `dispatch`, by `harness/engine/repro-strike.js`.
-Two of its thirteen claims are false in the engine as written. `doStrike` is not the fault: both
-its branches are correct, and the foremost walks down the ladder exactly as §9 says. The fault is
-upstream, in who is allowed to take the field.
+`battleUnits` and `biddablePeoples` each decide whether a wild people already has an Ally+ patron,
+and they decide it differently: `live(g).find((q) => rank(g, q, rid) >= 2)` takes the FIRST living
+power that qualifies, while `biddablePeoples` loops `for (const q of PLAYERS)` and keeps the LAST,
+over all five rather than the living. Ally is exclusive and forfeit zeroes a court's ties, so the
+two should never disagree today, which is exactly what makes this worth closing before something
+lets them: the question is asked twice and answered by two different walks.
 
-**The defect.** `battleUnits`'s militia branch is the one place that never asks whether a
-building is a unit:
-
-```js
-if (rid === t) { if (side === "def") out.push({ rid, i, terms: "militia", cost: 0 }); return; }
-```
-
-Every other branch reaches `unitReaches`, which opens `const u = BT[bd.t].unit; if (!u) return
-false`. So an undefended province defends with its farms, markets, granaries and workshops, each
-worth 1 defence — and because `commitUnit` taps whatever it commits, the province's producers are
-tapped before the strikes are chosen.
-
-**Why that makes the overrun branch unreachable.** `launchRaid` commits
-`need = min(max(0, A − walls), own.length)` militia, and the raid is won only when `A > need +
-walls`. If `need = A − walls` the defence exactly matches the attack and the raid is REPELLED; so
-a won raid is precisely one where `need = own.length` — every untapped work in the target has
-been conscripted and tapped. Every strike therefore lands on the destroy branch. `repro-strike.js`
-drives 496 raids on an unprotected Qadesh across every composition of its slots and every attacker
-strength: 196 won, **0 plundered anything, and not one left an untapped producer to overrun.**
-The "larder raid" of §13 tip 6 — "each strike on an untapped producer plunders its full yield …
-against truly bare ground it is often the cheapest food on the map" — cannot happen.
-
-**The fix**, one clause, in `battleUnits`:
-
-```js
-if (rid === t) { if (side === "def" && BT[bd.t].unit) out.push({ rid, i, terms: "militia", cost: 0 }); return; }
-```
-
-It is free: the differential stays **10/10 identical** and all ten suites stay green, because no
-walk has ever reached an undefended target. That is the measure of how invisible this was, not
-evidence that it is small — with the clause in place those same 496 raids win 421 and plunder 185.
-
-**And a second answer read off a different ledger.** `view`'s field panel reports the defence as
-`fortressDef(g, g.raid.t)` — two arguments to a three-argument function, so `t` is `undefined`,
-`g.b[undefined]` is `[]`, and the total is **literally always `defence 0`**, walls or no walls,
-units or no units, while `resolveRaid` counts `defC` plus walls. The attacker's column is honest
-(`strength ${raidStrength(g)}`), so the two columns are not reporting the same kind of thing. The
-fix is to compute it the way the resolution does:
-
-```js
-total: `defence ${g.raid.defC.filter((u) => u.terms !== "hire").length + fortressDef(g, raider, g.raid.t)}`
-```
-
-**When the fix lands:** apply both clauses, rename `repro-strike.js` to `test-strike.js` and add
-`strike` to `run-all.sh`'s suite list, and delete `test-war.js`'s "damage walks down the ladder"
-— the repro's destroy-branch block is the same claim with the strike code actually running, which
-is what the entry above asks for.
+One of them should be the answer — `patronOf(g, rid)` beside `biddablePeoples` — and the other
+should call it. Nothing about play changes, so the differential should stay 10/10; if it does not,
+the two were already disagreeing and the seed that shows it is the interesting artefact.

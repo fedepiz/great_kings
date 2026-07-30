@@ -1,86 +1,81 @@
-// TODO: tests that encode constraints instead of exercising code — the two ownership walks are now
-// checkWorld's own assertion; the `usable` truth table transcribes a three-line function; "markets
-// open to Ties+" asserts `acts.length >= 0` and cannot fail; "follows the writ" pins 1 and 3.
+// Ownership, read back through the doors: `works.answers` says WHOSE a work is, and the menu
+// says what that ownership lets a court do. The old truth table transcribed `usable` line by
+// line; what replaces it is the property the rulebook actually claims — RAISING A RUNG NEVER
+// REVOKES A COMMAND — plus the ownership facts, asked as facts. The two opening walks this
+// file once made are checkWorld's own assertion now.
+// TODO: tests that encode constraints instead of exercising code — "follows the writ" still
+// pins 1 and 3 where BT.granary.capBonus is the claim.
 const M = require("../new.cjs");
 const F = require("./fixtures.cjs");
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };
 const fork = F.fork;
-const BTx = M.BT;
-const PLAYERS = F.players();
+const Q = (g, q) => M.query(g, q);
+const D = (g, c) => M.dispatch(fork(g), c);
 
-console.log("\n— who owns what at the start —");
+console.log("\n— works answer a power or their province —");
 let g = M.initState(F.CANON);
-let crownOwned = [], regionOwned = [], strays = [];
-for (const rid of Object.keys(g.b)) g.b[rid].forEach((bd) => {
-  if (!bd) return;
-  const crown = bd.t === "palace" || BTx[bd.t].annex;
-  if (crown && PLAYERS.includes(bd.o)) crownOwned.push(bd.t);
-  else if (!crown && bd.o === rid) regionOwned.push(bd.t);
-  else if (crown && bd.o === rid) regionOwned.push(bd.t);   // wild warbands
-  else strays.push(`${bd.t}@${rid}(o=${bd.o})`);
-});
-ok(strays.length === 0, `no ordinary building is owned by a player (${strays.slice(0,4).join(", ") || "none"})`);
+const was = Q(g, { ask: "works", region: F.home("M") });
+ok(was.find((w) => w.type === "palace").answers === "M", "the palace answers its crown");
+ok(was.find((w) => w.type === "farm").answers === "province", "the farm answers the province, whoever holds it");
 
-console.log("\n— what a build produces —");
-let g2 = fork(g);
-// find a legal build the engine offers, run it through, and inspect the result
-let s = 3 >>> 0;
-const rnd = () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
-let built = null, guard = 0;
-while (!built && guard++ < 4000) {
-  const menu = M.availableCommands(g2).filter((c) => c.t !== "forfeit");
-  if (!menu.length) break;
-  const before = JSON.stringify(g2.b);
-  g2 = M.dispatch(fork(g2), menu[Math.floor(rnd() * menu.length)]);
-  if (JSON.stringify(g2.b) !== before) {
-    for (const rid of Object.keys(g2.b)) g2.b[rid].forEach((bd) => {
-      if (bd && !(bd.t === "palace" || BTx[bd.t].annex) && PLAYERS.includes(bd.o)) built = `${bd.t}@${rid}`;
-    });
-  }
-  if (g2.round > 20) break;
+console.log("\n— raising a rung never revokes a command —");
+// Carchemish holds a farm and sits within the levy's reach of Mitanni's palace. One authored
+// world per rung; the levy menu at each rung must contain the one below it, and the climb to
+// Subject must GAIN ground — a chain of equal menus would prove nothing.
+{
+  const taxTargets = (rung, influence) => {
+    let w = M.initState(F.variant(
+      F.seatFirst("M"),
+      F.noStanding("M", "CAR"),
+      ...(rung ? [F.standing("M", "CAR", rung, influence)] : []),
+    ));
+    w = D(w, M.availableCommands(w).find((c) => c.t === "activate" && c.rid === F.home("M") && c.b === "palace"));
+    w = D(w, { t: "verb", v: "tax" });
+    return new Set(M.availableCommands(w).filter((c) => c.t === "region").map((c) => c.rid));
+  };
+  const ladder = [taxTargets(null), taxTargets("friend", 2), taxTargets("ally", 5), taxTargets("subject", 10)];
+  let monotone = true;
+  for (let k = 1; k < ladder.length; k++)
+    for (const rid of ladder[k - 1]) if (!ladder[k].has(rid)) monotone = false;
+  ok(monotone, "every rung's levy menu contains the one below it");
+  ok(ladder[3].has("CAR") && !ladder[0].has("CAR"),
+     `and the climb to Subject gains Carchemish (${[...ladder[3]].join(",") || "nothing"} vs ${[...ladder[0]].join(",") || "nothing"})`);
 }
-ok(built === null, `after 20 rounds of play, still no player-owned ordinary building (${built || "none"})`);
-
-console.log("\n— a province's works answer whoever holds the province —");
-// the canon already stands a farm in Mitanni's home; the claims need no planting
-const home = F.home("M");
-let g3 = M.initState(F.CANON);
-const homeFarm = g3.b[home].find((bd) => bd && bd.t === "farm");
-ok(M.usable(g3, "M", home, homeFarm) === true, "a farm in your home is at your command");
-ok(M.usable(g3, "B", home, homeFarm) === false, "the same farm is not at a stranger's command");
-
-// a farm on foreign ground: usable only at Subject. Wilusa is authored with one — non-wild,
-// nobody's capital, nobody's subject, so the ladder below is the only writ in play.
-const foreign = "WIL";
-const probe = (rung, influence) => M.initState(F.variant(
-  F.addWork(foreign, { type: "farm" }),
-  F.standing("M", foreign, rung, influence),
-));
-let gF = probe("friend", 2), gS = probe("subject", 10);
-const foreignFarm = (gg) => gg.b[foreign].filter((bd) => bd && bd.t === "farm").pop();
-ok(M.usable(gF, "M", foreign, foreignFarm(gF)) === false, "a Friend's farm is NOT yours to levy or tap");
-ok(M.usable(gS, "M", foreign, foreignFarm(gS)) === true, "a Subject's farm answers your command");
 
 console.log("\n— a crown's organs stay its own —");
-let g4 = M.initState(F.variant(F.addWork(home, { type: "chancery", crown: "M" })));
-const ch = g4.b[home].find((bd) => bd && bd.t === "chancery");
-ok(M.usable(g4, "M", home, ch) === true, "your chancery is yours");
-ok(M.usable(g4, "B", home, ch) === false, "your chancery is not a rival's, even in their sphere");
+{
+  const withChancery = (opener) => M.initState(F.variant(
+    F.seatFirst(opener),
+    F.addWork(F.home("M"), { type: "chancery", crown: "M" }),
+  ));
+  const gM = withChancery("M"), gB = withChancery("B");
+  ok(Q(gM, { ask: "works", region: F.home("M") }).find((w) => w.type === "chancery").answers === "M",
+     "the chancery answers its crown");
+  ok(M.availableCommands(gM).some((c) => c.t === "activate" && c.rid === F.home("M") && c.b === "chancery"),
+     "its own crown may open it");
+  ok(!M.availableCommands(gB).some((c) => c.t === "activate" && c.b === "chancery"),
+     "a rival may not, even with the whole board on offer");
+}
 
 console.log("\n— markets open to Ties+, not only Subjects —");
-let g5 = M.initState(F.variant(
-  F.seatFirst("M"),
-  F.addWork(foreign, { type: "market" }),
-  F.standing("M", foreign, "friend", 2),
-));
-const acts = M.availableCommands(g5).filter((c) => c.t === "activate" && c.rid === foreign);
-ok(acts.length >= 0, `a market on Friend ground is reachable for activation (${acts.length} offer(s) — gated also by whether sources exist)`);
+{
+  // Amurru gets a market, a farm to sell, and Mitanni at Friend with goods to pay
+  const g5 = M.initState(F.variant(
+    F.seatFirst("M"),
+    F.addWork("AMU", { type: "market" }),
+    F.addWork("AMU", { type: "farm" }),
+    F.standing("M", "AMU", "friend", 2),
+    F.stock("M", { food: 2, bronze: 2, cloth: 2, pottery: 2 }),
+  ));
+  const acts = M.availableCommands(g5).filter((c) => c.t === "activate" && c.rid === "AMU" && c.b === "market");
+  ok(acts.length > 0, `a market on Friend ground opens for trade (${acts.length} offer(s))`);
+}
 
 console.log("\n— the Food Store follows the writ, not the deed —");
 const granaryAt = (rung, influence) => M.initState(F.variant(
-  F.addWork(foreign, { type: "granary" }),
-  F.standing("M", foreign, rung, influence),
+  F.addWork("WIL", { type: "granary" }),
+  F.standing("M", "WIL", rung, influence),
 ));
 const atFriend = M.query(granaryAt("friend", 2), { ask: "foodStore", power: "M" });
 const atSubject = M.query(granaryAt("subject", 10), { ask: "foodStore", power: "M" });

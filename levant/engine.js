@@ -15,8 +15,8 @@
 //  HOUSE STYLE, THE TWO INVARIANTS, AND HOW TO PROVE A CHANGE ARE IN ../CLAUDE.md.
 //  Read them before editing this file. The short version: one general path specialised by
 //  data, specialisation as a field rather than a branch, no if-chain that grows an arm per
-//  case, dispatch total and gated on availableCommands, flat and short. `npm test` must hold
-//  at 10/10 differential seeds unless you meant to change the rules.
+//  case, dispatch total and gated on availableCommands, flat and short. `npm test` — the
+//  suites, the armed invariants, and the boundary — must hold before any change is done.
 // =====================================================================
 
 // ============================ THE WORLD IS SCENARIO DATA ============================
@@ -1575,6 +1575,10 @@ const QUERIES = {
   year:   { args: {}, answer: (g) => g.round },
   turn:   { args: {}, answer: (g) => g.turn },
   desk:   { args: {}, answer: (g) => effectiveSeat(g) },
+  chain:  { args: {}, answer: (g) => g.chain },
+  // the interaction-mode label Order.read consumes — for Order's callers, never for a table
+  // (the view hides the step's identity deliberately; see THE STEP)
+  mode:   { args: {}, answer: (g) => (g.mode ? g.mode.v : (g.act ? "verb-choice" : "activate")) },
   seated: { args: {}, answer: (g) => live(g) },
   passed: { args: { power: "power" }, answer: (g, q) => !!g.passed[q.power] },
   // ---- the ladder ----
@@ -1602,7 +1606,15 @@ const QUERIES = {
   stock:     { args: { power: "power", good: "good?" },
                answer: (g, q) => (q.good !== undefined ? g.players[q.power].stock[q.good] : { ...g.players[q.power].stock }) },
   foodStore: { args: { power: "power" }, answer: (g, q) => foodStore(g, q.power) },
+  foodRots:  { args: { power: "power" }, answer: (g, q) => foodRots(g, q.power) },
   upkeepDue: { args: { power: "power" }, answer: (g, q) => upkeepDue(g, q.power) },
+  // ---- the desk's own errand ----
+  // null when no activation is open; `left`/`granted` are null for a trade seat, whose one
+  // command is the trade itself
+  activation: { args: {},
+                answer: (g) => (!g.act ? null : { left: g.act.capLeft ?? null, granted: g.act.cap0 ?? null }) },
+  // the year's ledger: which provinces this power has spent each once-per-year verb on
+  ledger: { args: { power: "power" }, answer: (g, q) => JSON.parse(JSON.stringify(g.spent[q.power] || {})) },
   // ---- the engagement ----
   engagement: { args: {},
                 answer: (g) => {
@@ -1611,15 +1623,23 @@ const QUERIES = {
                   return null;
                 } },
   raid: { args: {},
-          answer: (g) => (!g.raid ? null : {
-            target: g.raid.t,
-            attackers: g.raid.atk.map((u) => ({ region: u.rid, slot: u.i })),
-            mustered: g.raid.defC.map((u) => ({ region: u.rid, slot: u.i })),
-            strikes: g.raid.strikes ?? null,
-          }) },
+          answer: (g) => {
+            // a committed unit's TERMS are §9's own words — own, allied, militia, hire —
+            // and what was paid to call it
+            const row = (u) => ({ region: u.rid, slot: u.i, terms: u.terms,
+                                  paidInfluence: u.paidInf || 0, paidGood: u.paidGood ?? null });
+            return !g.raid ? null : {
+              target: g.raid.t,
+              by: g.raid.mode,
+              attackers: g.raid.atk.map(row),
+              mustered: g.raid.defC.map(row),
+              strikes: g.raid.strikes ?? null,
+            };
+          } },
   contest: { args: {},
              answer: (g) => (!g.contest ? null : {
                region: g.contest.rid,
+               binding: !!g.contest.binding,
                turnOrder: [...g.contest.turnOrder],
                parties: { ...g.contest.party },
                lots: JSON.parse(JSON.stringify(g.contest.lots)),
@@ -1697,9 +1717,9 @@ function advanceChain(chain, cmd) {
 // The exclusion lives HERE, in one list, and nowhere else — so a field added tomorrow is part
 // of the position unless somebody deliberately says otherwise. That is the safe default: an
 // over-sensitive fingerprint is noisy and obvious, an under-sensitive one quietly reports that
-// two different boards are the same. The claim is checked, not asserted —
-// harness/engine/test-hash.js wipes the excluded fields across thousands of states and confirms
-// the legal moves never change.
+// two different boards are the same. The claim is held twice, on real transitions: `refuse`
+// asserts on every armed refusal that a log write moves no digest, and test-hash plays one
+// position by two routes and demands equal fingerprints and equal menus.
 //
 // ONE CAVEAT, worth knowing before relying on it. Mid-action the mode holds scratch —
 // `gifts` is an array holding a set, `taps` likewise — so two routes that have chosen the
@@ -1801,18 +1821,22 @@ function stockGoods(g) {
 // asserted in test-commands.js instead, which holds the menu to being right rather than
 // patching for it being wrong. The table needs no exemption either: it has ONE dispatch site
 // and ships `view`'s own commands verbatim, so it never issues anything off-menu.
+// A REFUSAL WRITES THE RECORD AND NOTHING ELSE. Armed, this is also the live proof that the
+// fingerprint ignores the record: the log has just changed, and the digest must not have.
+function refuse(g, msg) {
+  const fp = ASSERTIONS ? fingerprint(g) : null;
+  g.log.unshift(msg);
+  if (ASSERTIONS) ASSERT(fingerprint(g) === fp, "a refusal moved the position", { msg, chain: g.chain });
+  return g;
+}
 function dispatch(g, cmd) {
-  if (!cmd || typeof cmd.t !== "string") { g.log.unshift("A command arrives malformed and is set aside."); return g; }
+  if (!cmd || typeof cmd.t !== "string") return refuse(g, "A command arrives malformed and is set aside.");
   // STALE: written against a world that no longer exists. Checked only when a stamp is
   // present, so replays and tests may dispatch bare commands.
-  if (cmd.chain !== undefined && cmd.chain !== g.chain) {
-    g.log.unshift("That word arrives too late — the world has moved since it was written.");
-    return g;
-  }
-  if (!validCmd(g, cmd)) {
-    g.log.unshift(`That is not on offer now: ${cmd.t}${cmd.rid ? " " + cmd.rid : ""}.`);
-    return g;
-  }
+  if (cmd.chain !== undefined && cmd.chain !== g.chain)
+    return refuse(g, "That word arrives too late — the world has moved since it was written.");
+  if (!validCmd(g, cmd))
+    return refuse(g, `That is not on offer now: ${cmd.t}${cmd.rid ? " " + cmd.rid : ""}.`);
   // READ THE STEP BEFORE APPLYING. applyCommand mutates in place and returns the SAME object —
   // callers clone before they dispatch — so a stepKey(g) read taken afterwards would compare the
   // new state to itself and the counter would never move. Nothing would catch that: a counter
@@ -3024,17 +3048,11 @@ export {
   // THE DIGESTS — same trajectory? (`g.chain`, carried on the state) · same position?
   fingerprint,
 
-  // WHOSE MOVE IT IS. `live` lists the seated powers; `effectiveSeat` says whose desk the
-  // next command comes from, which is not always `g.turn` — a contest passes it round.
-  live, effectiveSeat,
-
   // ORDERS — the pivot between commands and intent. harness/engine/test-orders.js walks the
   // engine's own play through this and back, which is the command layer's regression test.
   Order,
 
-  // READ BY THE SUITES ONLY. These let a test assert against a rule directly instead of
-  // inferring it from play. Nothing in the interface may call them.
-  // TODO: six internals still leave by this block, not the query door — each dies with the
-  // test that reads it; see TODO.md.
-  costTapCovered, foodRots, legalTargets, specOf, tapYields, usable,
+  // READ BY THE SUITES ONLY — one name. test-view's closing block dispatches it to
+  // demonstrate WHY the map must never ask it; that contrast is the whole reason it leaves.
+  legalTargets,
 };

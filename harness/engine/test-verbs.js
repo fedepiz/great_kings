@@ -57,8 +57,9 @@ const wildOffered = M.availableCommands(g5).filter((c) => c.t === "region").map(
 ok(!wildOffered.includes("KAS"), "the wild never submit — no Subject treaty is offered");
 
 console.log("\n— the treaty costs a command and spends it —");
-ok(g1.act === null || (g1.act && g1.act.capLeft === 2),
-   `the palace's budget falls by one (${g1.act ? g1.act.capLeft : "activation closed"})`);
+const a1 = Q(g1, { ask: "activation" });
+ok(a1 === null || a1.left === 2,
+   `the palace's budget falls by one (${a1 ? a1.left : "activation closed"})`);
 
 console.log("\n— SEA RAID: only warriors sail, and only from a harbour —");
 // Mycenae: island power with ports. Its home is full at setup, so the warriors are AUTHORED
@@ -87,8 +88,10 @@ ok(noBerth.length < seaTargets.length, `a tapped port offers fewer berths (${noB
 console.log("\n— a sea raid opens the same contest as a land raid —");
 if (seaTargets.length) {
   let s2 = D(s0, { t: "region", rid: seaTargets[0] });
-  ok(s2.raid && s2.raid.mode === "sea", `the raid is by sea (${s2.raid && s2.raid.mode})`);
-  ok(s2.contest && s2.contest.kind === "raid" && s2.contest.binding === false,
+  const r2 = Q(s2, { ask: "raid" });
+  ok(r2 && r2.by === "sea", `the raid is by sea (${r2 && r2.by})`);
+  const e2 = Q(s2, { ask: "engagement" }), k2 = Q(s2, { ask: "contest" });
+  ok(e2 && e2.kind === "raid" && k2 && k2.binding === false,
      "and it opens an unbound contest, refundable until the launch");
 } else { ok(false, "no sea target available to open"); }
 

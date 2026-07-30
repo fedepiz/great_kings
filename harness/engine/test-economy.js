@@ -1,18 +1,12 @@
-// TODO: tests that encode constraints instead of exercising code — "state shape" and "no overflow
-// commands survive" assert deleted features stay deleted; "the Food Store" and "what winter
-// takes" restate BT.granary.capBonus and the spoilage formula; "a sourcing must actually pay"
-// is now checkMenu's commitTaps biconditional.
+// TODO: tests that encode constraints instead of exercising code — "the Food Store" and
+// "what winter takes" restate BT.granary.capBonus and the spoilage formula.
 const M = require("../new.cjs");
 const F = require("./fixtures.cjs");
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };
 const fork = F.fork;
 const Q = (g, q) => M.query(g, q);
-
-console.log("\n— state shape —");
-let g = M.initState(F.CANON);
-ok(!("pendingOverflow" in g), "no pendingOverflow in state");
-ok(F.players().every((p) => !("committed" in g.players[p])), "no committed pool on any player");
+const g = M.initState(F.CANON);
 
 console.log("\n— the Food Store —");
 ok(Q(g, { ask: "foodStore", power: "M" }) === 1, `palace alone carries 1 food (got ${Q(g, { ask: "foodStore", power: "M" })})`);
@@ -25,66 +19,14 @@ console.log("\n— the reckoning: grain rots, metal keeps —");
 let g3 = M.initState(F.variant(F.stock("M", { food: 9, bronze: 7, cloth: 5, pottery: 4 })));
 for (const q of F.players()) g3 = M.dispatch(fork(g3), { t: "pass" });
 g3 = M.dispatch(g3, { t: "resolveUpkeep" });
-let guard = 0;
-while (g3.shortfall && guard++ < 40) {
-  const c = M.availableCommands(g3).find((x) => x.t === "perish");
-  if (!c) break;
-  g3 = M.dispatch(g3, c);
-}
+let guard = 0, perish;
+while ((perish = M.availableCommands(g3).find((x) => x.t === "perish")) && guard++ < 40)
+  g3 = M.dispatch(g3, perish);
 const m3 = Q(g3, { ask: "stock", power: "M" });
 ok(m3.food === Q(g3, { ask: "foodStore", power: "M" }),
    `food falls to the Food Store after upkeep (${m3.food} vs store ${Q(g3, { ask: "foodStore", power: "M" })})`);
 ok(m3.bronze === 7 && m3.cloth === 5 && m3.pottery === 4,
    "bronze, cloth and pottery survive the year untouched");
-
-console.log("\n— no overflow commands survive anywhere —");
-let g5 = M.initState(F.CANON);
-let seen = new Set(), s = 7 >>> 0;
-const rnd = () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
-for (let i = 0; i < 6000; i++) {
-  const menu = M.availableCommands(g5).filter((c) => c.t !== "forfeit");
-  if (!menu.length) break;
-  for (const c of menu) seen.add(c.t);
-  g5 = M.dispatch(fork(g5), menu[Math.floor(rnd() * menu.length)]);
-  if (g5.round > 15) break;
-}
-ok(!seen.has("overflowTable") && !seen.has("overflowSwap") && !seen.has("overflowAllTable") && !seen.has("commitToTable"),
-   `no table commands ever offered (${seen.size} distinct commands seen)`);
-
-console.log("\n— chronicle no longer mentions the table —");
-ok(!/upkeep table|stockpile overflow/i.test(g5.log.join(" ")), "no table language in the chronicle");
-
-console.log("\n— a sourcing must actually pay —");
-// The payment rule must live in the gate, not in a greyed button: anything going through
-// dispatch — an order expander, a replay, an agent — would otherwise settle a food bill with
-// pottery, and `costTakePaid` would decrement a good that was never in the basket.
-{
-  let g = M.initState(F.variant(F.seatFirst("B")));
-  g = M.dispatch(g, M.availableCommands(g).find((c) => c.t === "activate" && c.rid === F.home("B") && c.b === "palace"));
-  g = M.dispatch(g, { t: "verb", v: "build" });
-  g = M.dispatch(g, M.availableCommands(g).find((c) => c.t === "region"));
-  g = M.dispatch(g, M.availableCommands(g).find((c) => c.t === "buildType"));
-  const slots = M.availableCommands(g).filter((c) => c.t === "slot");
-  let checked = 0, wrong = 0;
-  for (const s of slots) {
-    const one = M.dispatch(fork(g), s);
-    const offered = M.availableCommands(one).some((c) => c.t === "commitTaps");
-    const pays = M.costTapCovered(M.specOf(one.mode), one.mode, M.tapYields(one, one.mode));
-    checked++; if (offered !== pays) wrong++;
-  }
-  ok(checked > 2 && wrong === 0, `commitTaps is offered exactly when the taps pay (${checked} selections)`);
-  const potter = slots.find((s) => {
-    const y = Q(g, { ask: "works", region: s.rid }).find((w) => w.slot === s.i)?.yield;
-    return y && y.good !== "food";
-  });
-  if (potter) {
-    const one = M.dispatch(fork(g), potter);
-    ok(!M.availableCommands(one).some((c) => c.t === "commitTaps"),
-       "a producer of the wrong good cannot settle a fixed bill");
-    const forced = M.dispatch(fork(one), { t: "commitTaps" });
-    ok(M.fingerprint(forced) === M.fingerprint(one), "and dispatching it anyway is refused");
-  } else console.log("   – no wrong-good producer in reach; skipped");
-}
 
 console.log("\n— what winter takes —");
 // Spoilage is a RULE, not a panel's forecast: food above the store rots at the reckoning, once
@@ -95,10 +37,11 @@ console.log("\n— what winter takes —");
   const withFood = (n) => M.initState(F.variant(F.stock(p, { food: n })));
   const base = M.initState(F.CANON);
   const keep = Q(base, { ask: "foodStore", power: p }), due = Q(base, { ask: "upkeepDue", power: p }).food;
-  ok(M.foodRots(withFood(0), p) === 0, "nothing rots when there is nothing");
-  ok(M.foodRots(withFood(due + keep), p) === 0, `upkeep plus the store keeps (${due}+${keep}) — nothing rots`);
-  ok(M.foodRots(withFood(due + keep + 3), p) === 3, "three above that, and three rot");
-  ok(M.foodRots(withFood(Math.max(0, due - 1)), p) === 0, "a court that is short loses nothing to winter — it loses mouths");
+  const rots = (n) => Q(withFood(n), { ask: "foodRots", power: p });
+  ok(rots(0) === 0, "nothing rots when there is nothing");
+  ok(rots(due + keep) === 0, `upkeep plus the store keeps (${due}+${keep}) — nothing rots`);
+  ok(rots(due + keep + 3) === 3, "three above that, and three rot");
+  ok(rots(Math.max(0, due - 1)) === 0, "a court that is short loses nothing to winter — it loses mouths");
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

@@ -14,7 +14,7 @@ beyond two `esbuild` command lines, and no package manager state that matters.
 npm install
 npm run dev      # esbuild dev server on :5173 — open http://127.0.0.1:5173/
 npm run build    # writes levant/main.js + levant/main.css beside the sources
-npm test         # the harness: differential, ten suites, sources compile, table renders
+npm test         # the harness: thirteen suites, armed invariants, the boundary, the render check
 ```
 
 `npm run dev` keeps serving as long as its stdin is open — that is how esbuild's serve mode

@@ -41,7 +41,7 @@ export default function App() {
   // a hot seat — but the stamp costs nothing and it is what makes a slow agent safe on shared
   // state later. A command that arrives already stamped is left alone.
   const go = (cmd) => {
-    gRef.current = dispatch(gRef.current, cmd && cmd.chain === undefined ? { ...cmd, chain: v.chain } : cmd);
+    gRef.current = dispatch(gRef.current, cmd ? { chain: v.chain, ...cmd } : cmd);   // a stamp the command already carries wins the spread
     setV(view(gRef.current));
   };
   const reset = () => { gRef.current = initState(CANON); setV(view(gRef.current)); };

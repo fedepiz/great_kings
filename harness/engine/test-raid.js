@@ -65,21 +65,26 @@ let g4 = M.dispatch(fork(g3), { t: "stand" });
 const e4 = Q(g4, { ask: "engagement" });
 ok(e4 === null || ["sack", "muster"].includes(e4.phase),
    "the contest resolves once every protector has stood");
-const joined = g4.log.some((l) => /takes the gifts and joins the raiders/.test(l));
-ok(joined, "one Sutu warband joins the side whose basket stood alone");
+ok(Q(g4, { ask: "works", region: "SUT" }).some((w) => w.tapped),
+   "one Sutu warband is spent — it took the gifts and marched");
+ok(e4 && e4.phase === "sack" && Q(g4, { ask: "raid" }).strikes === 2,
+   "and its spear counts: 2 strikes where the stables alone would win 1");
 
 console.log("\n— a counter-bid that dominates takes them back —");
 let g5 = fork(g3);
 g5 = M.dispatch(fork(g5), { t: "bid", pid: "SUT", good: "bronze" });
 g5 = M.dispatch(fork(g5), { t: "bid", pid: "SUT", good: "food" });   // 1 bronze + 1 food beats 1 bronze
 g5 = M.dispatch(fork(g5), { t: "stand" });
-ok(g5.log.some((l) => /joins the defence/.test(l)), "the dominating basket wins the warband for the defence");
+ok(Q(g5, { ask: "engagement" }) === null && Q(g5, { ask: "works", region: "SUT" }).some((w) => w.tapped),
+   "the dominating basket wins the warband for the defence — its spear repels the raid");
 
 console.log("\n— matching without exceeding moves no one —");
 let g6 = fork(g3);
 g6 = M.dispatch(fork(g6), { t: "bid", pid: "SUT", good: "bronze" });  // exactly equal
 g6 = M.dispatch(fork(g6), { t: "stand" });
-ok(g6.log.some((l) => /find no clear master/.test(l)), "an equal basket is a tie and nobody moves");
+ok(Q(g6, { ask: "works", region: "SUT" }).every((w) => !w.tapped)
+   && Q(g6, { ask: "raid" })?.strikes === 1,
+   "an equal basket is a tie: no warband marches, and the raid wins only its own strike");
 
 console.log("\n— everything laid stays with the people, win, lose or tie —");
 const spentB = 4 - bronzeOf(g6, "B");

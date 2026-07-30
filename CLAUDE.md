@@ -24,18 +24,18 @@ levant/
   main.jsx         the only file that knows a DOM exists: mounts App.
   table.css        the utility classes app.jsx's layout depends on.
 harness/
+  README.md        THE MAP OF THE HARNESS — what checks what, and why each check exists
   run-all.sh       everything, in one command (`npm test`)
   render-check.jsx does the table draw, at both sizes?
   engine/
-    test-*.js      twelve suites; the exact assertion count is in the test output
-    drive.js       plays a seeded game, prints a fingerprint
-    diff.sh        replays 10 seeds against ref.cjs — a pure refactor must be identical
-    check.sh       bundle + differential, quickly
+    test-*.js      thirteen suites; the exact assertion count is in the test output
+    fixtures.cjs   authored scenarios and forked timelines — how a suite builds a position
+    check-boundary.cjs + boundary-allowlist.txt   THE SEAL: no read past the doors
 great-kings-player-rules.md   the rulebook, current with the engine
 ```
 
 Generated and gitignored: `levant/main.js`, `levant/main.css`, `harness/new.cjs` (the engine
-bundle the suites import), `harness/ref.cjs` (the differential's baseline).
+bundle the suites import), `harness/scenario.cjs` (the canon world as data).
 
 **Reading order for `engine.js`:** `worldFrom`/`validateScenario` (how `scenario.js` becomes
 `g.world`) → `BT` (the rules as data) → `ACTIONS` (every verb's range, cost, targets, commit)
@@ -71,6 +71,14 @@ in the option's `cmd` being `null`.
 A corollary for the export list at the foot of `engine.js`: **export nothing without a caller.**
 An export that lets a caller ask "is this allowed?" some other way is a second answer to a
 question `availableCommands` already answers.
+
+**The state is a DOCUMENT and the boundary is messages.** Everything crossing the engine's
+surface is JSON: a scenario in, a state out; command + state in, state out; question + state
+in, plain value out (`query`). Nothing outside the engine INTERPRETS the document — the table
+draws the view, the suites ask the doors — and `harness/engine/check-boundary.cjs` makes that
+a red build, against an allowlist that is empty and stays empty unless a reach is granted
+there with its reason. The engine could be reimplemented behind these doors and nothing
+outside would know.
 
 ---
 
@@ -161,25 +169,17 @@ once, watch it fire, revert.
 
 ## Proving you did not break anything
 
-The command layer is deterministic, so a refactor is checkable rather than hopeable.
-
 ```bash
-npm test    # differential, ten suites, sources compile, table renders
+npm test    # thirteen suites with invariants armed, the boundary, sources compile, the render
 ```
 
-**A pure refactor must produce identical play.** `harness/engine/diff.sh` replays 10 seeded
-games against `harness/ref.cjs` and compares chronicle hash, stores and influence. Anything
-less than 10/10 identical means you changed behaviour, whether you meant to or not.
-`harness/engine/check.sh` is the quick version: bundle, then differential.
-
-**A deliberate rules change will and should shift that fingerprint.** When it does:
-
-1. prove the change is the one you intended — e.g. that the menu only ever *gains* commands
-2. `cp harness/new.cjs harness/ref.cjs` to accept the new baseline
-3. update `great-kings-player-rules.md`, which claims to be exactly as implemented
-
-On a fresh clone there is no `ref.cjs`, so the first run establishes one and compares nothing.
-That is expected, and it is not a pass.
+`harness/README.md` is the map of what each gate checks. The differential (a seeded robot
+replaying old-vs-new builds) is RETIRED: its robot chose from the mutating menu, so it
+measured menu drift rather than rule drift, and its old-build coupling broke exactly when the
+API moved — TODO.md holds the thinking toward a sound successor. Until one exists, a rules
+change is proven the direct way: the suite that pins the mechanic changes with it, and
+`great-kings-player-rules.md` — which claims to be exactly as implemented — changes in the
+same commit.
 
 **Add coverage for a mechanic BEFORE refactoring it.** Random play is uneven — it lands trade
 around 1,900 times per 8 seeds and treaty once — so the thin verbs (`treaty`, `searaid`, the

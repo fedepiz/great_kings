@@ -15,6 +15,8 @@ const path = require("path");
 const M = require(path.join(__dirname, "..", "new.cjs"));
 const F = require("./fixtures.cjs");
 const fork = F.fork;
+const Q = (g, q) => M.query(g, q);
+const A = (g) => Q(g, { ask: "activation" });
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };
 
@@ -38,7 +40,7 @@ function sweep(seeds, rounds) {
     let g = M.initState(F.CANON);
     let action = [], soFar = [], startState = fork(g);
     for (let i = 0; i < 4000; i++) {
-      if (g.round > rounds) break;
+      if (Q(g, { ask: "year" }) > rounds) break;
       const menu = M.availableCommands(g).filter((c) => !NEVER.has(c.t) && !NOT_AN_ACTION.has(c.t));
       if (!menu.length) {
         const esc = M.availableCommands(g).find((c) => c.t === "pass" || c.t === "endActivation" || NOT_AN_ACTION.has(c.t));
@@ -49,7 +51,7 @@ function sweep(seeds, rounds) {
       // behind it — a gift toggled on and off, a verb chosen and abandoned — is not something
       // an order should be able to say. Without these three filters the walk generates
       // incoherent traces and this suite measures nonsense.
-      const committed = !!(g.mode && g.mode.v && g.mode.v !== "source");
+      const committed = !["source", "verb-choice", "activate"].includes(Q(g, { ask: "mode" }));
       let choices = menu
         .filter((c) => !(committed && c.t === "verb"))                        // no dithering
         .filter((c) => c.t === "bid" || !soFar.includes(key(c)));             // no self-undo
@@ -68,14 +70,14 @@ function sweep(seeds, rounds) {
         g = M.dispatch(fork(g), esc); action = []; soFar = []; startState = fork(g); continue;
       }
       const cmd = choices[Math.floor(rnd() * choices.length)];
-      const mode = g.mode ? g.mode.v : (g.act ? "verb-choice" : "activate");
-      const capBefore = g.act ? g.act.capLeft : null;
-      const deskBefore = M.effectiveSeat(g);
+      const mode = Q(g, { ask: "mode" });
+      const capBefore = A(g) ? A(g).left : null;
+      const deskBefore = Q(g, { ask: "desk" });
       action.push({ cmd, mode }); soFar.push(key(cmd));
       const next = M.dispatch(fork(g), cmd);
-      const capAfter = next.act ? next.act.capLeft : null;
+      const capAfter = A(next) ? A(next).left : null;
       const spent = (capBefore != null && capAfter != null && capAfter < capBefore)
-        || (g.act && !next.act) || M.effectiveSeat(next) !== deskBefore;
+        || (A(g) && !A(next)) || Q(next, { ask: "desk" }) !== deskBefore;
       if (spent && action.length) {
         n++;
         const order = M.Order.read(action);

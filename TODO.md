@@ -23,20 +23,10 @@ opening influence, renaming a command — turns it red without anything having b
 a constraint rather than checking behaviour.** What earns a test's place is exercising a path, or
 checking an oracle whose value is not derivable from the code under test.
 
-**Delete — nothing replaces them.**
-
-| site | what |
-|---|---|
-| `test-economy.js` "state shape" | asserts `pendingOverflow` and `committed` are absent; nothing writes either |
-| `test-economy.js` "no overflow commands survive" | a 6,000-step walk that confirms four deleted command names never appear; `COMMANDS` closure covers this for every name, not four |
-| `test-hash.js` `ok(true, "→ the fingerprint is route-independent…")` | a comment counted as a passing assertion; make it a `console.log` |
-
 **Delete — an assertion already covers them.**
 
 | site | assertion |
 |---|---|
-| `test-ownership.js` "who owns what", "what a build produces" | `checkWorld` — a work answers a power or its own province |
-| `test-economy.js` "a sourcing must actually pay" | `checkMenu` — `commitTaps` ⟺ the taps pay |
 | `test-commands.js` "a court may always set down what it has picked up" | `checkMenu` — an open activation offers a way out |
 | `test-subvert.js` "once per target per year" | `checkMenu` — the menu never re-offers a spent target |
 | `test-raid.js` "goods leave the stores", "everything laid stays" | `dispatch` — a contest mints or burns no goods |
@@ -48,19 +38,14 @@ checking an oracle whose value is not derivable from the code under test.
 | `test-economy.js` "the Food Store" | `foodStore === 1`, `=== 3` | loop `Object.keys(BT)`: placing `t` moves the store by `BT[t].capBonus \|\| 0` |
 | `test-ownership.js` "follows the writ" | `atFriend === 1 && atSubject === 3` | `atSubject - atFriend === BT.granary.capBonus` |
 | `test-economy.js` "what winter takes" | four asserts evaluating `max(0, food - due - keep)` by hand | keep the two boundaries — exactly `due + keep`, and below `due` where the clamp lives |
-| `test-ownership.js` "a province's works answer whoever holds it" | a six-row `usable` truth table transcribing a three-line function | one property: raising a rung never revokes a command |
 
-**Fix — and expect to learn something.** Two checks whose outcome is unknown because neither has
-ever been written honestly:
-
-- `test-ownership.js` "markets open to Ties+" asserts `acts.length >= 0`. Write `> 0`. If it
-  fails, either the rule is not what the message claims or the fixture supplies no sources.
-- Two disjunctions admit the failure they exist to catch: `test-verbs.js` "the treaty costs a
-  command" passes when the activation vanished, and `test-raid.js` "the contest resolves" admits
-  three outcomes including nothing having happened. Tighten both.
+**Fix — and expect to learn something.** Two disjunctions admit the failure they exist to
+catch: `test-verbs.js` "the treaty costs a command" passes when the activation vanished, and
+`test-raid.js` "the contest resolves" admits three outcomes including nothing having
+happened. Tighten both.
 
 **Keep untouched.** `test-view.js`, both `test-commands.js` fuzzes, `test-orders.js`,
-`test-hash.js`'s route-independence and record-wipe, the render check, and the resolution oracles
+`test-hash.js`'s route-pair, the render check, and the resolution oracles
 in `test-subvert.js` and `test-verbs.js` — "everyone else drops by the winner's standing" and
 "overtaking demotes the incumbent" are rules with content, not restatements.
 
@@ -86,14 +71,13 @@ prefer breaking the source to confirm an assertion fires over trusting that it w
 world is identical but `contest.lots[pid].atk` has become `{}` where it was absent. It shows on
 roughly half the reversible bids a walk reaches.
 
-This is not a play defect: nothing reads the difference. It weakens the ORACLE. `fingerprint` is
-what `test-orders.js` compares to judge "same world, different route" for every action it
-round-trips, and what `diff.sh` compares across seeds — so a route that legitimately reverses
-itself reads as having changed the world.
+This is not a play defect: nothing reads the difference. It weakens the ORACLE. `fingerprint`
+is what `test-orders.js` compares to judge "same world, different route" for every action it
+round-trips, and what `test-hash.js`'s route-pair demands equality on — so a route that
+legitimately reverses itself reads as having changed the world.
 
-The fix is a line in `canonical`: skip a key whose canonical form is `{}` or `[]`. **It shifts
-the fingerprint**, so it belongs in its own commit with a fresh `ref.cjs`, and the differential
-reporting 0/10 is the expected outcome rather than a regression.
+The fix is a line in `canonical`: skip a key whose canonical form is `{}` or `[]`. It shifts
+every fingerprint, so it belongs in its own commit.
 
 ## Vestigial fields
 
@@ -112,8 +96,44 @@ unit that takes the field without counting are all rules that would need designi
 field means anything. So the decision is per field: design the rule, or delete it.
 
 **Deleting is a behaviour change, not a cleanup.** They are part of the serialised state, so
-removing `g.rot` shifts `fingerprint(g)` and the differential will report 0/10. That is correct
-and expected — but it means the removal belongs in its own commit, with a fresh `ref.cjs`.
+removing `g.rot` shifts `fingerprint(g)`; the removal belongs in its own commit.
+
+## `forfeit` cannot be told apart from its own confirmation
+
+`forfeit` is the only two-word command: the first arms it, the second carries it out, and any
+`pass` disarms it. But `availableCommands` offers the identical `{t:"forfeit"}` in both states,
+so nothing driving the game through `dispatch` can tell the arming word from the fatal one
+without reading `g.confirmForfeit` — which the interface is not allowed to do, and which `view`
+does not report.
+
+For the hot seat this is harmless: the table's own click sequence supplies the two words. It
+becomes a real defect the moment anything else drives the game. The fix is one of:
+
+- have `availableCommands` distinguish them (`{t:"forfeit", confirm:true}`), which makes the
+  distinction visible to `cmdKey`, the chain, and every caller; or
+- report the armed state as a fact on `view`, and leave the command alone.
+
+The first is the better shape — the menu should say what a command will do — but it changes the
+command surface, so it wants pinning in `test-commands.js` first.
+
+## The table never says which power is acting, and control interleaves
+
+The interface gives no clear statement of whose word the next command is. It matters most in the
+cases where the desk is NOT the power whose turn it is — control passes mid-action to a raid's
+defenders one at a time, to each participant in a subversion's bidding, and to whoever must
+choose abandonments in a famine. A player looking at a muster prompt has to infer from the
+panel's own label which court is being asked.
+
+The facts are already reported; this is a table-side change. `view` returns both `seat` (whose
+turn it is) and `effectiveSeat` (whose desk the next command comes from). `app.jsx:33` takes
+`const p = v.seat` and never reads `effectiveSeat` at all — so anything the table tints or
+labels from `p` speaks for the turn-holder even while another court is acting. Worth checking
+what currently keys off `p`: the notice colour, the `subject.self` highlight on the power cards,
+and the title block.
+
+To decide: whether the two seats want distinct treatments (a persistent "X to act" line, versus
+a temporary "Y is answering" state), and whether an interleaved actor should be visible on the
+board as well as in the panel.
 
 ## `forfeit` cannot be told apart from its own confirmation
 
@@ -177,3 +197,19 @@ Scheduling (every command, every turn, on a sample) and invariants-as-data
 (`{name, when, given, holds}`) remain harness work, waiting on the `walk()` consolidation in
 the tests section; `test-query.js` carries the two invariants written so far (foremost ≡
 argmax, contests ascend) inline.
+
+## A successor to the differential
+
+The seeded-robot differential (drive.js + diff.sh + ref.cjs) is removed. Its idea — determinism
+makes a refactor checkable — was right; its method was not. The robot chose from
+`availableCommands`, which itself mutates as rules change, so identical digests measured menu
+stability, not rule stability; it ran one driver against two builds of a moving API, which is
+exactly where it broke; and it demonstrably missed real defects (a rules change once turned 0
+of 196 won raids into 185 plundering ones while the differential held 10/10 — see
+test-strike's header).
+
+A sound successor would fix the TRAJECTORY, not the policy: recorded command scripts — fixed
+command lists from authored openings, replayed through dispatch, with the resulting chronicle,
+chain and fingerprint pinned as goldens. A rules change then shifts named goldens, reviewed
+like any diff, instead of a robot's whim. Whether that earns its keep beside the suites and
+the armed invariants is the open question; design it before building it.

@@ -10,6 +10,7 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };
 const fork = F.fork;
 const clone = (o) => JSON.parse(JSON.stringify(o));   // for COMMAND prototypes only — forking a command would graft a world key onto it
+const Q = (g, q) => M.query(g, q);
 
 // every command shape the engine can emit, harvested from real play
 const shapes = new Map();
@@ -24,7 +25,7 @@ for (const seed of [12345, 777, 42, 31337, 555]) {
     harvest(g);
     if (i % 40 === 0) states.push(fork(g));
     const menu = M.availableCommands(g).filter((c) => c.t !== "forfeit");
-    if (!menu.length || g.round > 12) break;
+    if (!menu.length || Q(g, { ask: "year" }) > 12) break;
     g = M.dispatch(fork(g), menu[Math.floor(rnd() * menu.length)]);
   }
 }
@@ -83,12 +84,12 @@ console.log("\n— a court may always set down what it has picked up —");
   const rnd = () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
   const OUT = ["back", "srcBack", "tradeCancel", "cancelActivation", "endActivation"];
   for (let i = 0; i < 1500; i++) {
-    if (g.act && !g.raid && !g.contest) {
+    if (Q(g, { ask: "activation" }) && !Q(g, { ask: "raid" }) && !Q(g, { ask: "contest" })) {
       checked++;
       if (!M.availableCommands(g).some((c) => OUT.includes(c.t))) stuck++;
     }
     const menu = M.availableCommands(g).filter((c) => c.t !== "forfeit");
-    if (!menu.length || g.round > 10) break;
+    if (!menu.length || Q(g, { ask: "year" }) > 10) break;
     g = M.dispatch(fork(g), menu[Math.floor(rnd() * menu.length)]);
   }
   ok(checked > 100 && stuck === 0, `every open activation offers a way out (${checked} checked)`);
@@ -97,15 +98,16 @@ console.log("\n— a court may always set down what it has picked up —");
   // and stepping back costs nothing: the command is not spent
   let g = M.initState(F.CANON);
   g = M.dispatch(g, M.availableCommands(g).find((c) => c.t === "activate" && c.b === "palace"));
-  const before = g.act.capLeft;
+  const before = Q(g, { ask: "activation" }).left;
   g = M.dispatch(g, { t: "verb", v: "build" });
   const tgt = M.availableCommands(g).find((c) => c.t === "region");
   if (tgt) {
     g = M.dispatch(g, tgt);
     ok(M.availableCommands(g).some((c) => c.t === "back"), "a named target can still be set aside");
     const b = M.dispatch(fork(g), { t: "back" });
-    ok(b.mode === null, "stepping back forgets the errand");
-    ok(b.act.capLeft === before, "and costs no command");
+    ok(M.availableCommands(b).some((c) => c.t === "verb"),
+       "stepping back forgets the errand — the verbs are on offer again");
+    ok(Q(b, { ask: "activation" }).left === before, "and costs no command");
   } else console.log("   – no build target from the opening; skipped");
 }
 

@@ -241,7 +241,7 @@ const INVARIANTS = [
 // will be further knobs here, not further branches.
 function generateRandom(scenario, seed, length, knobs = {}) {
   const reject = knobs.reject || {};
-  const rounds = knobs.rounds ?? 8;
+  const rounds = knobs.rounds ?? Infinity;
   let s = seed >>> 0;
   const rnd = () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
   let g = M.initState(scenario);
@@ -397,19 +397,22 @@ for (const c of CHECKS) report.checks[c.name] = { cite: c.cite, ok: 0, no: 0, fa
 for (const i of INVARIANTS) report.invariants[i.name] = { cite: i.cite, fired: 0, failures: [] };
 
 // ---- invocation knobs, every one defaulted:
-//   node test-checks.js [--seeds 5,17,23,41] [--length 700] [--rounds 8] [--worlds canon,contests,treaties]
+//   node test-checks.js [--seeds 5,17,23,41] [--length 700] [--rounds N] [--worlds canon,contests,treaties]
+// `--length` is THE bound; `--rounds` is unlimited unless asked for — an era bound is a tool
+// for deliberately studying early game, not a default, and deep years are where organically
+// reached rule states live.
 const argv = {};
 for (let i = 2; i < process.argv.length; i += 2) {
   const k = process.argv[i], v = process.argv[i + 1];
   if (!k || !k.startsWith("--") || v === undefined) {
-    console.error("usage: test-checks.js [--seeds 5,17,23,41] [--length 700] [--rounds 8] [--worlds canon,contests,treaties]");
+    console.error("usage: test-checks.js [--seeds 5,17,23,41] [--length 700] [--rounds N, default unlimited] [--worlds canon,contests,treaties]");
     process.exit(1);
   }
   argv[k.slice(2)] = v;
 }
 const SEEDS = (argv.seeds || "5,17,23,41").split(",").map(Number);
 const LENGTH = Number(argv.length || 700);
-const ROUNDS = Number(argv.rounds || 8);
+const ROUNDS = argv.rounds === undefined ? Infinity : Number(argv.rounds);
 const RUN_WORLDS = (argv.worlds || Object.keys(WORLDS).join(",")).split(",");
 for (const w of RUN_WORLDS) if (!WORLDS[w]) { console.error(`unknown world "${w}" — have: ${Object.keys(WORLDS).join(", ")}`); process.exit(1); }
 if (SEEDS.some(Number.isNaN) || Number.isNaN(LENGTH) || Number.isNaN(ROUNDS)) {
@@ -423,7 +426,7 @@ const KNOBS = { rounds: ROUNDS, reject: {
   srcToChoose: 0.9, srcBack: 0.9, bidTake: 0.9,
 } };
 
-console.log(`\n— generate, then check: ${RUN_WORLDS.length} world(s) × ${SEEDS.length} seed(s), ≤${LENGTH} commands, ≤${ROUNDS} years —`);
+console.log(`\n— generate, then check: ${RUN_WORLDS.length} world(s) × ${SEEDS.length} seed(s), ≤${LENGTH} commands${Number.isFinite(ROUNDS) ? `, ≤${ROUNDS} years` : ""} —`);
 for (const label of RUN_WORLDS) for (const seed of SEEDS) {
   const trace = generateRandom(WORLDS[label](), seed, LENGTH, KNOBS);
   report.runs.push({ world: label, seed, steps: trace.length });

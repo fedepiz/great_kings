@@ -14,9 +14,12 @@ package manager state that matters. `npx esbuild` is used for building and for t
 Both are **single self-contained files**, built from source, meant to be opened as artifacts:
 
 | `levant-prototype-v25.jsx` | the game — board, panels, and the scribe's desk |
-| `orders-bench.jsx` (built to `/mnt/user-data/outputs/`) | the evaluation bench |
+| `dist/orders-bench.jsx` | the evaluation bench |
 
-**Neither is edited by hand.** Both are build outputs and are overwritten. Edit the sources.
+**Neither is edited by hand, and neither is committed.** Both are build outputs, overwritten on
+every build and git-ignored. Edit the sources; run `npm run build` to get a game to upload and
+`./harness/inject.sh` to get a bench. Both take a destination — an argument, or
+`GREAT_KINGS_PUBLISH` / `GREAT_KINGS_PUBLISH_BENCH` — for wherever you publish from.
 
 ---
 
@@ -24,8 +27,8 @@ Both are **single self-contained files**, built from source, meant to be opened 
 
 ```
 levant/
-  engine.js        THE RULES. No React, no JSX, no DOM. ~2,200 lines, 160 exports.
-  app.jsx          THE TABLE. Interface and the scribe desk. ~770 lines.
+  engine.js        THE RULES. No React, no JSX, no DOM. ~2,700 lines, 35 exports.
+  app.jsx          THE TABLE. Interface and the scribe desk. ~780 lines.
 
 build-game.js      engine.js + app.jsx  →  levant-prototype-v25.jsx
 
@@ -35,9 +38,10 @@ harness/
   inject.sh        build the orders-bench artifact
 
   engine/          "does the game still work?"
-    test-*.js      ten suites, ~115 assertions
+    test-*.js      ten suites, 111 assertions
     test-view.js   "does the table have a second opinion?" — every option the table can
                    click is a command the engine offers, over 50k states
+    assert.js      the counter, the tick and the exit code the ten suites share
     drive.js       plays a seeded game, prints a fingerprint
     diff.sh        replays 10 seeds against ref.cjs — a pure refactor must be identical
     check.sh       bundle + differential, quickly
@@ -48,19 +52,24 @@ harness/
     validate-corpus.js the corpus replays against the engine, exactly
     validate-pack.js   oracle 100% / always-wrong 0% / random ≈ baseline
     test-roundtrip.js  the corpus round-trips through Order
-    check-chain.js     every stage is newer than the one it is built from
-    build-bench.js     engine + generator + UI → orders-bench.jsx
+    check-chain.js     each stage carries a hash of the one it was built from
+    build-bench.js     engine + generator + UI → dist/orders-bench.jsx
     orders-bench.jsx   the bench's own source (the UI half)
 
   SCRIBE-FINDINGS.md   what the evaluation established
-  KNOWN-ISSUES.md      what is wrong, and what was wrong and is now understood
+  KNOWN-ISSUES.md      what is still open
 
 great-kings-player-rules.md   the rulebook, current with the engine
-smoke*.jsx                    render checks used by run-all.sh
+smoke.jsx, smoke-mobile.jsx   render checks, run by run-all.sh
 ```
 
-Generated and not worth keeping: `harness/new.cjs` (the engine bundle the tests import),
-`harness/ref.cjs` (the differential reference), `*.bak*`.
+Generated and not committed: `levant-prototype-v25.jsx` and `dist/` (the two artifacts),
+`harness/new.cjs` (the engine bundle the tests import), `harness/ref.cjs` (the differential
+reference), `*.bak*`.
+
+**The corpus and the pack are committed**, though they are generated too. They are the record
+a measurement was taken against, and `SCRIBE-FINDINGS.md` quotes their shape; regenerating
+them is deterministic from fixed seeds, so a diff means the engine moved.
 
 ---
 
@@ -153,9 +162,10 @@ two routes to the same board compare equal; it is exact at action boundaries.
 ## Working on it
 
 ```bash
-./harness/run-all.sh          # build, differential, nine suites, both renders
+./harness/run-all.sh          # build, differential, ten suites, both sources,
+                              # the published bench, both renders
 ./harness/rebuild-bench.sh    # corpus → pack, with every check
-./harness/inject.sh           # build the orders-bench artifact
+./harness/inject.sh [dest]    # build the orders-bench artifact
 ```
 
 **After any engine change:**
@@ -165,10 +175,16 @@ two routes to the same board compare equal; it is exact at action boundaries.
 3. if the **differential** reports differences, decide whether they are intended. Prove the
    change is what you think — e.g. that the menu only ever *gains* commands — then
    `cp harness/new.cjs harness/ref.cjs` to accept the new baseline
-4. `./harness/rebuild-bench.sh` if the corpus should follow
+4. `./harness/rebuild-bench.sh` — **not "if the corpus should follow": always.** The corpus
+   carries a hash of the engine it was generated from, and `check-chain.js` fails while they
+   disagree. That is deliberate. The corpus and the pack bake in prose the engine produced,
+   so a change with no effect on play at all — rewording one chronicle line — still leaves the
+   pack quoting text the engine has stopped producing, with every count still matching.
 
 **The differential is the safety net for refactors.** Ten seeded games must play identically
-unless the change is meant to alter play.
+unless the change is meant to alter play. It compares the whole chronicle, so a change to the
+*wording* of a log line reports as ten differences: check `fingerprint(g)` is unchanged, which
+is the question of whether the world moved, and accept the baseline.
 
 **Three failures have reached the browser**, each because a test passed on something that was
 not the artifact. All three are now guarded, and the guards are worth keeping:
@@ -185,6 +201,21 @@ A fourth was found the other way round: **the source was broken and the artifact
 the built file and passed. `run-all.sh` now compiles **both sources on their own** as well.
 The general form: *a guard that only ever looks at the build output cannot see a fault in
 what the build throws away.*
+
+**And a fifth class, which is worse: guards that could not fire at all.** An audit of the
+repository found three, none of them failing, all of them reading like coverage:
+
+- `run-all.sh` compiled the "published artifacts" by looking for a **filename no build here
+  has ever produced**, under a path belonging to the sandbox this project was written in, and
+  `continue`d past it in silence. It ran on every machine and checked nothing.
+- `test-orders.js` — the regression test for the whole command layer — ended
+  `process.exit(fail ? 0 : 0)`. It could not report a failure.
+- and `run-all.sh` piped every suite into `grep`, so a suite's exit code was **grep's**, and
+  `set -e` saw success whatever a suite returned.
+
+The first is why a check that skips must *say* it skipped, and why the ones here now do. The
+other two are the same lesson as the differential: **a test that has never been seen to fail
+has not been shown to work.** Break it on purpose once.
 
 And: **do not publish `levant/app.jsx` or `levant/engine.js` as artifacts.** They are sources
 and import each other; only the built files run.
@@ -207,8 +238,12 @@ matters: **a directive must be as specific as the decision it governs** — seve
 defects, every one an instruction that did not say enough, and every one making a competent
 model look broken.
 
-The **vizier** — board → plan — is designed but not built. The design is in the thread, and
-the essentials: the game has **no victory condition** (§12), so "good play" is undefined and
-the honest question is *what is the marginal value of a planner over arithmetic*; four of the
-five stated GOALS are computable; a **heuristic planner should be a rival candidate**, not
-merely a calibration floor.
+The **vizier** — board → plan — is **not designed and not built.** A design for it was worked
+out in the conversation this repository was assembled from, and did not come with it; treat it
+as lost rather than as somewhere to look. What survived is the four constraints below, which
+are the part that was load-bearing:
+
+- The game has **no victory condition** (§12 of the rulebook), so "good play" is undefined.
+- The honest question is therefore *what is the marginal value of a planner over arithmetic*.
+- Four of the five stated GOALS are computable.
+- A **heuristic planner should be a rival candidate**, not merely a calibration floor.

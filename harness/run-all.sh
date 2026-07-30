@@ -14,6 +14,11 @@
 set -eo pipefail
 cd "$(dirname "$0")/.."
 
+# ASSERTIONS ARE ARMED FOR THE WHOLE HARNESS. Every walk below then checks every invariant in
+# engine.js, so coverage of the invariants is coverage of the walks and costs no new test. An
+# assertion firing throws, so the suite that reached the broken world reports it and stops.
+export GK_CHECK=1
+
 # harness/new.cjs is the engine as the suites import it, and harness/ref.cjs is the
 # differential's accepted baseline. Both are generated; neither is committed.
 echo "— engine bundle —"

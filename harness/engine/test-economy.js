@@ -1,3 +1,7 @@
+// TODO: tests that encode constraints instead of exercising code — "state shape" and "no overflow
+// commands survive" assert deleted features stay deleted; "nothing is turned away" runs no engine
+// code; "the Food Store" and "what winter takes" restate BT.granary.capBonus and the spoilage
+// formula; "a sourcing must actually pay" is now checkMenu's commitTaps biconditional.
 const M = require("../new.cjs");
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };

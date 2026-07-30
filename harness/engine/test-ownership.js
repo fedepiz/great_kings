@@ -1,3 +1,6 @@
+// TODO: tests that encode constraints instead of exercising code — the two ownership walks are now
+// checkWorld's own assertion; the `usable` truth table transcribes a three-line function; "markets
+// open to Ties+" asserts `acts.length >= 0` and cannot fail; "follows the writ" pins 1 and 3.
 const M = require("../new.cjs");
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };

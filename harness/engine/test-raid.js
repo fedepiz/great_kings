@@ -1,6 +1,10 @@
 // Coverage for the RAID CONTEST — the part of the engine the random walk barely touches
 // (6 seeds x 30 rounds fired 3 bids and 1 strike). These drive a real raid on Qadesh, which
 // borders two wild peoples, through actual dispatch commands, and pin the bidding outcomes.
+// TODO: tests that encode constraints instead of exercising code — "goods leave the stores" and
+// "everything laid stays with the people" are instances of dispatch's conservation assertion;
+// "the contest resolves once every protector has stood" admits three outcomes, one of which is
+// nothing having happened. The bidding outcomes — dominate, tie, unmatched — stay.
 const M = require("../new.cjs");
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };

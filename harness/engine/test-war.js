@@ -1,3 +1,7 @@
+// TODO: tests that encode constraints instead of exercising code — "the foremost, and ties" is
+// three hand-built argmax tables where a brute-force oracle over a walk would do; "damage walks
+// down the ladder" applies its own -2 and executes no strike code, so it needs replacing with a
+// raid driven through dispatch before it is deleted.
 const M = require("../new.cjs");
 let pass=0, fail=0;
 const ok=(c,m)=>{ if(c){pass++;console.log("  ✓",m);} else {fail++;console.log("  ✗ FAIL:",m);} };

@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Coverage for THE WORLD HASH — the core's protection against a command written against a
 // world that no longer exists. This is what lets slow agents act safely on shared state.
+// TODO: tests that encode constraints instead of exercising code — one `ok(true, …)` here counts a
+// comment as a passing assertion. Everything else in this file is a property and stays.
 const M = require("../new.cjs");
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };

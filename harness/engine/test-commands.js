@@ -2,6 +2,8 @@
 // through dispatch(), so dispatch must be total: any command, in any state, must be absorbed
 // or refused — never throw. This fuzzes every known command shape against a wide spread of
 // live states, including states the command has no business arriving in.
+// TODO: tests that encode constraints instead of exercising code — the way-out walk is now
+// checkMenu's own assertion. The two fuzzes are the right shape and stay.
 const M = require("../new.cjs");
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };

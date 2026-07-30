@@ -1,3 +1,7 @@
+// TODO: tests that encode constraints instead of exercising code — "once per target per year" is
+// now checkMenu's spent-ledger assertion, and the `turnOrder` check pins a literal three-element
+// array where "ascending by influence" is the rule and wants asserting at construction. The
+// resolution arithmetic below it is an oracle with content and stays.
 const M = require("../new.cjs");
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };

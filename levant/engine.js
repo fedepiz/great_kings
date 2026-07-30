@@ -781,8 +781,10 @@ function legalTargets(g) {
 
 // ---- resolution ----
 function spend(g) {
+  ASSERT(!!g.act, "a command is spent with no activation open", { turn: g.turn, mode: g.mode && g.mode.v });
   g.mode = null;
   g.act.capLeft--;
+  ASSERT(g.act.capLeft >= 0, "an activation spends past its budget", { turn: g.turn, capLeft: g.act.capLeft });
   if (g.act.capLeft <= 0) endActivation(g);
 }
 function forfeit(g, p) {
@@ -1593,6 +1595,8 @@ function advanceChain(chain, cmd) {
 // genuine sequences (a contest's bidding order is not a set). So the fingerprint is exact
 // at ACTION BOUNDARIES, which is where every user of it compares.
 const NOT_THE_WORLD = ["log", "chain", "step"];
+// TODO: an empty container is not the absence of one — an emptied basket keeps its key, so two
+// routes to the same world can fingerprint differently.
 function canonical(v) {
   if (v === null || typeof v !== "object") return JSON.stringify(v) ?? "null";
   if (Array.isArray(v)) return "[" + v.map(canonical).join(",") + "]";
@@ -1603,6 +1607,73 @@ function fingerprint(g) {
   let x = 0x811c9dc5;
   for (let i = 0; i < s.length; i++) { x ^= s.charCodeAt(i); x = Math.imul(x, 0x01000193) >>> 0; }
   return x.toString(16).padStart(8, "0");
+}
+
+// ============================== ASSERTIONS ==============================
+// ASSERT names something that must never be false. It is NOT a rule and NOT a refusal. A rule
+// belongs in `availableCommands`, where every caller is held to it; a refusal is `dispatch`
+// carrying out or setting aside a command, which it does for every command in every state.
+//
+// An ASSERT that fires means the WORLD is no longer legal, and nothing computed from it means
+// anything after that: the menu, the view and the next command all read a state that is already
+// false. So it throws and the run stops. Do not soften one into a log line or a recovery — a
+// count of violations gathered along a walk measures how far the walk went, not how many things
+// are wrong, because one corrupt state is re-observed at every state after it.
+//
+// Armed by `GK_CHECK=1`, which the harness sets: every walk it already owns then checks every
+// invariant below. Disarmed there is no `process` in a browser, so `ASSERTIONS` is false and
+// each call costs one boolean read; the whole-world and whole-menu sweeps are skipped at their
+// call sites rather than inside, so an unarmed run never builds them. A player's game is not
+// where a broken world gets found.
+//
+// `detail` is a replay handle, not a message. Where the command and the pre-state's chain are in
+// scope, carry both — with the seed they name the exact trajectory that reached here.
+const ASSERTIONS = typeof process !== "undefined" && !!(process.env && process.env.GK_CHECK);
+function ASSERT(ok, label, detail) {
+  if (ok || !ASSERTIONS) return;
+  throw new Error(`ASSERT: ${label}` + (detail === undefined ? "" : ` — ${JSON.stringify(detail)}`));
+}
+
+// THE WORLD'S OWN INVARIANTS — true of every state, checked after every accepted command.
+// Assert only what has been measured to hold across the harness's walks. An invariant that
+// needs a scope belongs at that boundary, not here with the scope written into its condition.
+function checkWorld(g, at) {
+  for (const r of REG) {
+    ASSERT(g.b[r.id].length === r.slots.length, "a province's works do not run parallel to its slots",
+      { ...at, rid: r.id, works: g.b[r.id].length, slots: r.slots.length });
+    g.b[r.id].forEach((bd, i) => {
+      if (!bd) return;
+      // WHOSE IS IT? — the rule is stated at `usable`. A crown work answers a power letter; every
+      // other work answers the province it stands in. A region id can never equal a power letter,
+      // which is what keeps the two namespaces from colliding.
+      ASSERT(isCrown(bd) ? PLAYERS.includes(bd.o) || bd.o === r.id : bd.o === r.id,
+        "a work answers neither a power nor its own province", { ...at, rid: r.id, i, t: bd.t, o: bd.o });
+      ASSERT(bd.tap === undefined || typeof bd.tap === "boolean",
+        "a work's tap is not a flag", { ...at, rid: r.id, i, t: bd.t, tap: bd.tap });
+    });
+  }
+  for (const q of PLAYERS) for (const t of GOODS)
+    ASSERT(g.players[q].stock[t] >= 0, "a stockpile holds less than nothing",
+      { ...at, p: q, good: t, n: g.players[q].stock[t] });
+  if (live(g).length)
+    ASSERT(live(g).includes(effectiveSeat(g)), "the desk belongs to no seated power",
+      { ...at, seat: effectiveSeat(g), live: live(g) });
+}
+
+// WHAT THE CONTEST HOLDS. Goods laid in a basket have left a stockpile and stand with the
+// people or the province; the two together are what conservation is measured over.
+function contestGoods(g) {
+  let n = 0;
+  if (g.contest && g.contest.lots)
+    for (const lot of Object.values(g.contest.lots))
+      for (const basket of Object.values(lot))
+        if (basket && typeof basket === "object") for (const t of GOODS) n += basket[t] || 0;
+  return n;
+}
+function stockGoods(g) {
+  let n = 0;
+  for (const q of PLAYERS) for (const t of GOODS) n += g.players[q].stock[t];
+  return n;
 }
 
 // THE GATE. dispatch is the whole API — the UI, a test, an AI and a network peer all arrive
@@ -1633,9 +1704,20 @@ function dispatch(g, cmd) {
   // new state to itself and the counter would never move. Nothing would catch that: a counter
   // wedged at 0 is still a number, and every assertion about its type still passes.
   const wasStep = stepKey(g);
+  const wasGoods = ASSERTIONS ? stockGoods(g) + contestGoods(g) : 0;
   const out = applyCommand(g, cmd);
   out.chain = advanceChain(g.chain, cmd);      // accepted: the world moves on
   out.step = g.step + (wasStep === stepKey(out) ? 0 : 1);
+  if (ASSERTIONS) {
+    const at = { cmd, chain: g.chain, step: out.step, round: out.round };
+    checkWorld(out, at);
+    // LAYING A GOOD MOVES IT; IT DOES NOT MINT OR BURN IT. A bid leaves a stockpile for a
+    // basket and taking it back reverses that, so across either the two totals hold. Every
+    // other command may create or consume goods and is not measured here.
+    if (cmd.t === "bid" || cmd.t === "bidTake")
+      ASSERT(stockGoods(out) + contestGoods(out) === wasGoods,
+        "a contest minted or burned goods", { ...at, was: wasGoods, now: stockGoods(out) + contestGoods(out) });
+  }
   return out;
 }
 
@@ -1711,6 +1793,7 @@ function applyCommand(g, cmd) {
       return g;
     case "srcBack": {
       const mm = g.mode;
+      ASSERT(!!mm && !!mm.kind, "a sourcing steps back with no errand behind it", { cmd, turn: p });
       g.mode = mm.kind === "trade" ? { v: "trade" } : mm.kind === "entreat" ? { v: "entreat" } : { v: "build", region: mm.region };
       return g;
     }
@@ -1913,7 +1996,55 @@ function describeCmd(g, c) {
   }
 }
 // What can be done RIGHT NOW — the headless driver's menu. Coarse but complete.
+// EVERY COMMAND THE ENGINE OFFERS. `availableCommands` emits nothing outside this set. Adding a
+// command means adding it here, and the harness holds a walk to reaching every entry — so an
+// entry no walk reaches is an untested path, and a command with no entry is unreachable.
+const COMMANDS = new Set([
+  "activate", "slot", "region", "verb", "back", "cancelActivation", "endActivation",
+  "buildType", "srcStock", "srcStockUnit", "srcToChoose", "srcBack", "commitTaps",
+  "giftToggle", "giftSend", "tradeCancel",
+  "bid", "bidTake", "launch", "stand", "calloff", "endRaid",
+  "perish", "restoreCourt", "resolveUpkeep", "pass", "forfeit",
+]);
+
+// THE MENU'S OWN INVARIANTS — held on every menu the engine hands out. Each is a biconditional
+// or a totality claim about the menu, never a rule: the rules are the menu.
+function checkMenu(g, out) {
+  const at = { chain: g.chain, step: g.step, round: g.round };
+  const seen = new Set();
+  for (const c of out) {
+    ASSERT(COMMANDS.has(c.t), "the menu offers a command outside the vocabulary", { ...at, t: c.t });
+    const k = cmdKey(c);
+    ASSERT(!seen.has(k), "the menu offers one command twice", { ...at, cmd: c });
+    seen.add(k);
+  }
+  const offers = (t) => out.some((c) => c.t === t);
+  ASSERT(offers("perish") === !!g.shortfall, "the famine and its abandonments disagree",
+    { ...at, shortfall: g.shortfall, offered: offers("perish") });
+  // A COURT MAY ALWAYS SET DOWN WHAT IT HAS PICKED UP. Nothing bypasses the gate, so an exit
+  // absent from the menu is an exit that does not exist and the activation is wedged.
+  if (g.act && !g.raid && !g.contest)
+    ASSERT(["back", "srcBack", "tradeCancel", "cancelActivation", "endActivation"].some(offers),
+      "an open activation offers no way out", { ...at, menu: out.map((c) => c.t) });
+  // The bill is settled from the purse or by taps, and `commitTaps` is offered exactly when the
+  // taps chosen so far cover it. A gate that lives anywhere else is a second answer.
+  if (g.mode && g.mode.kind && ACTIONS[g.mode.kind === "build" ? "build" : g.mode.kind])
+    ASSERT(offers("commitTaps") === !!costTapCovered(specOf(g.mode), g.mode, tapYields(g, g.mode)),
+      "commitTaps and the taps that would pay for it disagree", { ...at, mode: g.mode.v, kind: g.mode.kind });
+  // ONCE PER TARGET PER YEAR. The ledger is the record; the menu must respect it.
+  if (g.mode && g.mode.v)
+    for (const c of out)
+      if (c.t === "region")
+        ASSERT(!usedOn(g, g.turn, g.mode.v, c.rid), "the menu re-offers a target already spent this year",
+          { ...at, p: g.turn, verb: g.mode.v, rid: c.rid });
+}
+
 function availableCommands(g) {
+  const out = menuOf(g);
+  if (ASSERTIONS) checkMenu(g, out);
+  return out;
+}
+function menuOf(g) {
   const p = g.turn; const out = [];
   if (g.shortfall) {
     for (const e of works(g, (bd) => bd.o === g.shortfall.p && isCrown(bd))) out.push({ t: "perish", rid: e[0], i: e[1] });
@@ -2645,6 +2776,10 @@ function setStatus(g, p, rid, next) {
 function seated(g, p, rid) {
   return (g.b[rid] || []).some((bd) => bd && BT[bd.t].annex && bd.o === p);
 }
+// `strained` IS A LATCH, NOT A PREDICATE. It records that a hold stood below its floor at THIS
+// reckoning and nothing else writes it, so a hold restored during the year keeps the flag until
+// the next reckoning clears it. Do not assert it against the floor: `strained` and
+// `rr.i < FLOOR[rr.s]` disagree in both directions between one reckoning and the next.
 function relationsUpkeep(g) {
   for (const p of live(g)) {
     for (const rid of Object.keys(g.rel[p])) {
@@ -2679,6 +2814,11 @@ function finishUpkeep(g) {
       g.log.unshift(`${PNAME[q]} keeps ${keep} food against the winter; ${lost} spoils for want of a granary.`);
     }
   }
+  // What the reckoning leaves is what the Food Store holds. Nothing else in the stores is
+  // touched by the year closing.
+  for (const q of live(g))
+    ASSERT(g.players[q].stock.food <= foodStore(g, q), "a court carries more food than its store holds",
+      { p: q, food: g.players[q].stock.food, store: foodStore(g, q), round: g.round });
   for (const rid of Object.keys(g.b)) g.b[rid].forEach((bd) => { if (bd) bd.tap = false; });
   g.round++;
   // the first seat rotates with the round, skipping the fallen

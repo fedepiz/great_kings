@@ -1,5 +1,9 @@
 // Coverage for the verbs random play barely lands: treaty (1 landing in 8 seeds x 30 rounds)
 // and searaid (1). These must be pinned BEFORE either verb moves into the ACTIONS table.
+// TODO: tests that encode constraints instead of exercising code — "every sea target is reachable
+// by water" reads `R[rid].coast`, which does not exist, behind an `|| true` that cannot fail;
+// "the treaty costs a command" passes when the activation vanished. The treaty climb and overtake
+// assertions above them are oracles with content and stay.
 const M = require("../new.cjs");
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; console.log("  ✓", m); } else { fail++; console.log("  ✗ FAIL:", m); } };

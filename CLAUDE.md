@@ -116,6 +116,40 @@ the interface to compensate — they protect nothing.
 **6. Flat and short.** Shallow nesting, small functions, control flow you can read straight
 down. `clickRegion` is eight lines. Keep it that way.
 
+**7. `ASSERT` states what must never be false.** An invariant belongs in the engine, once, at
+the code it constrains — not restated as an example in a suite. `ASSERT(ok, label, detail)`
+throws when `ok` is false and `GK_CHECK=1`, which `run-all.sh` exports, so every walk the
+harness already owns checks every invariant and new coverage costs no new test.
+
+- **An ASSERT is not a rule and not a refusal.** A rule goes in `availableCommands`, which holds
+  every caller to it whether the assertions are armed or not; a refusal is `dispatch` setting a
+  command aside. An ASSERT firing means the world is no longer legal.
+- **It throws, and the run stops. Do not soften one into a log line.** Everything computed from
+  a broken state is meaningless, so a count of violations gathered along a walk measures how far
+  the walk went, not how many things are wrong: one corrupt state is re-observed at every state
+  after it.
+- **`detail` is a replay handle, not a message.** Where the command and the pre-state's chain
+  are in scope, carry both — with the seed they name the trajectory that reached here.
+- **Assert only what holds, not what ought to.** A walk finding no counterexample is not a
+  proof: `strained` survived 25,000 states of one walk before another policy's first pass found
+  a legal state that broke it. When an invariant needs a scope, put it at that boundary — see
+  the food-store check in `finishUpkeep` — or drop it and state the reason at the site, as
+  `relationsUpkeep` does.
+
+The three homes, by what they claim:
+
+| where | claims | examples |
+|---|---|---|
+| `checkWorld` | true of every state | works answer a power or their province; no stockpile below zero; the desk is a seated power |
+| `checkMenu` | true of every menu | the vocabulary is `COMMANDS`; no command offered twice; an open activation offers a way out; `commitTaps` ⟺ the taps pay |
+| at the site | a pre- or postcondition of one routine | `spend` has an activation; the reckoning leaves no more food than the store holds |
+
+**Proving an ASSERT can fire takes one of two routes**, and which one tells you what kind of
+claim it is. If corrupting a state falsifies it, the mutation is the proof. If the claim is that
+two code paths agree — the menu against the ledger, the menu against the cost — no state
+falsifies it, because the engine repairs the state on the way through; break the source line
+once, watch it fire, revert.
+
 ---
 
 ## Proving you did not break anything

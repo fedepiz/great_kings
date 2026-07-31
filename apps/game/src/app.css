@@ -1,0 +1,56 @@
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+:root {
+  --board-bg: #E5D9B8;           /* parchment */
+  --board-fg: #2A241B;           /* dark umber */
+  --panel-bg: rgba(26, 22, 17, 0.93);  /* near-black leather; alpha lets the board glow through */
+  --panel-fg: #EDE4CF;           /* cream */
+  --panel-border: #6B5B3E;       /* dim bronze */
+  --card-bg: #3A3226;
+  --card-border: #54492F;
+  --label-fg: #8A7346;           /* bronze; section labels, strong borders */
+  --well-bg: #241F16;            /* inset areas: logs, chronicle body */
+  --shadow: 0 10px 34px rgba(0, 0, 0, 0.5);
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+main {
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  background: var(--board-bg)
+}
+
+
+.panel {
+  position: absolute;
+  left: 12px; top: 12px; bottom: 12px;
+  width: 360px;
+  overflow-y: auto;
+  color: var(--panel-fg);
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+}
+
+.card {
+  background: var(--card-bg);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font: 14px var(--serif);
+}
+
+.map-box-name {
+  font: 11px var(--serif);
+  fill: var(--board-fg);
+  pointer-events: none;
+}

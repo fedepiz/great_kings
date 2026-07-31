@@ -67,6 +67,31 @@ claim it is. If corrupting a state falsifies it, the mutation is the proof. If t
 two code paths agree, no state falsifies it, because the core repairs the state on the way
 through; break the source line once, watch it fire, revert.
 
+**8. Tables and passes, not containers and queries.** State is flat arrays of fat structs,
+swept whole; it is never an object graph interrogated one node at a time. When one table must
+meet another, write the meeting as a **batch pass**: a sort-merge riding an order the gate
+already established, or a `Map` built in one pass and drained in the next. Both are joins;
+choose the merge when the order is already there to ride, the map when none exists and one
+meeting does not justify one. What this rule bans is the third style — lookups scattered
+per-item through the logic, hiding a table scan inside every innocent loop.
+
+- **An ordering is an invariant like any other.** One comparator is the single source of the
+  order — the sort, the merge, and any future binary search all call it, so they cannot
+  disagree. Establish the order at the gate; exploit it everywhere; assert it with an adjacent
+  scan (`order(a[i-1], a[i]) < 0` checks sorted *and* unique in one line).
+- **Scratch is born and dies inside one function.** A join's working set (half-entries, row
+  buffers) is local to the pass that uses it. Never store a derived index in State — a cached
+  lookup structure is a second source of truth that every mutation must now maintain.
+- **When two passes differ only in which field they stamp, they are one pass** — make the
+  difference a tag on the work item (a halfedge knows which end it anchors) and switch on it at
+  the leaf. The merge machinery then exists once and can only be wrong once.
+- **A hash container is pass-local scratch, never state.** A `Map`/`Set` built and drained
+  inside one function is a legal join tool; stored in State it is a derived index — a second
+  source of truth every mutation must maintain. The escape hatch for a lookup a profile shows
+  hot is indices resolved at the gate, not a persistent map.
+- Ids are names for the boundary (conf, errors, replay traces); positions and indices are for
+  the core. Resolution happens at the gate, once.
+
 ---
 
 ## Comments

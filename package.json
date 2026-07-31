@@ -1,0 +1,27 @@
+{
+  "name": "great_kings",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fedepiz/great_kings.git"
+  },
+  "bugs": {
+    "url": "https://github.com/fedepiz/great_kings/issues"
+  },
+  "homepage": "https://github.com/fedepiz/great_kings#readme",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "check": "tsc --build",
+    "dev": "npm run dev -w @gk/game",
+    "build": "npm run build -w @gk/game"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}

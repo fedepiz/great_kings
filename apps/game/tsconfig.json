@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "types": ["node"],
+    "jsx": "react-jsx",
+    "outDir": ".types"
+  },
+  "include": ["src", "vite.config.ts"],
+  "references": [{ "path": "../../packages/engine" }]
+}

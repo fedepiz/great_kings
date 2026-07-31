@@ -1,0 +1,16 @@
+
+{
+    "compilerOptions": {
+        "target": "es2023",
+        "lib": ["es2023"],              // the engine inherits this: no DOM, no fetch, no window
+        "types": [],                    // no ambient globals unless a project asks; keeps `Buffer` out of the engine
+        "module": "preserve",
+        "moduleResolution": "bundler",  // honours "exports"; no .js extensions needed
+        "strict": true,
+        "isolatedModules": true,        // esbuild compiles file-at-a-time; this keeps tsc honest
+        "verbatimModuleSyntax": true,   // you must write `import type` where you mean it
+        "composite": true,
+        "emitDeclarationOnly": true,    // tsc emits .d.ts and never .js
+        "declarationMap": true
+    }
+}

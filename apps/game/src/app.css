@@ -54,3 +54,39 @@ main {
   fill: var(--board-fg);
   pointer-events: none;
 }
+
+/* A wild people's name sits on darker ground and needs the lighter ink. */
+.map-box-name.is-wild {
+  fill: #4A3D24;
+}
+
+/* The digit on a mark, cream on every colour it can land on. The dark halo is
+   what makes that possible: without it a power's colour would have to be dark
+   enough to hold cream, which forces all five into one narrow band of the wheel
+   and makes them harder to tell apart. Ink that carries itself frees the palette
+   to be chosen for distinctness instead. */
+.map-box-mark {
+  font: 8px var(--mono);
+  fill: #F5EDD8;
+  paint-order: stroke;
+  stroke: #2A241B;
+  stroke-width: 2px;
+  stroke-linejoin: round;
+  text-anchor: middle;
+  pointer-events: none;
+}
+
+/* A work's sigil and a slot's ground mark are set in the mono face: two or three
+   characters sized to the square they sit in, centred on it. */
+.map-slot-glyph,
+.map-slot-ground {
+  font: 10px var(--mono);
+  fill: var(--board-fg);
+  text-anchor: middle;
+  pointer-events: none;
+}
+
+.map-slot-ground {
+  font-size: 8px;
+  fill: #54492F;
+}
